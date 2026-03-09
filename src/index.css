@@ -1,0 +1,44 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap');
+
+@theme {
+  --font-sans: "Cairo", ui-sans-serif, system-ui, sans-serif;
+  --color-gold: #D4AF37;
+  --color-gold-light: #F1E5AC;
+  --color-gold-dark: #A67C00;
+}
+
+body {
+  direction: rtl;
+  text-align: right;
+  background-color: #0a0a0a;
+  color: #ffffff;
+}
+
+.gold-gradient {
+  background: linear-gradient(135deg, #D4AF37 0%, #F1E5AC 50%, #A67C00 100%);
+}
+
+.gold-text {
+  background: linear-gradient(135deg, #D4AF37 0%, #F1E5AC 50%, #A67C00 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D4AF37;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #A67C00;
+}
