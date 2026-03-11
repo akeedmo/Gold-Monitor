@@ -1,8 +1,8 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import sqlite3 from "sqlite3";
-import { open, Database } from "sqlite";
+import fs from "fs";
+import initSqlJs from "sql.js";
 import axios from "axios";
 import Parser from "rss-parser";
 import bcrypt from "bcryptjs";
@@ -14,8 +14,80 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 const dbPath = process.env.VERCEL ? "/tmp/gold_monitor.db" : "gold_monitor.db";
-let db: Database;
 const parser = new Parser();
+
+let sqlJsDb: any = null;
+let inTransaction = false;
+
+function saveDatabase() {
+  if (!sqlJsDb) return;
+  const data = sqlJsDb.export();
+  fs.writeFileSync(dbPath, Buffer.from(data));
+}
+
+const db = {
+  async get(sql: string, params: any[] = []) {
+    if (!sqlJsDb) return undefined;
+    const stmt = sqlJsDb.prepare(sql);
+    try {
+      if (params.length) stmt.bind(params);
+      if (stmt.step()) {
+        return stmt.getAsObject();
+      }
+      return undefined;
+    } catch (e) {
+      console.error("DB Get Error:", e);
+      return undefined;
+    } finally {
+      stmt.free();
+    }
+  },
+  async all(sql: string, params: any[] = []) {
+    if (!sqlJsDb) return [];
+    const stmt = sqlJsDb.prepare(sql);
+    const results = [];
+    try {
+      if (params.length) stmt.bind(params);
+      while (stmt.step()) {
+        results.push(stmt.getAsObject());
+      }
+      return results;
+    } catch (e) {
+      console.error("DB All Error:", e);
+      return [];
+    } finally {
+      stmt.free();
+    }
+  },
+  async run(sql: string, params: any[] = []) {
+    if (!sqlJsDb) return;
+    try {
+      sqlJsDb.run(sql, params);
+      if (!inTransaction) saveDatabase();
+    } catch (e) {
+      console.error("DB Run Error:", e);
+      throw e;
+    }
+  },
+  async exec(sql: string) {
+    if (!sqlJsDb) return;
+    try {
+      sqlJsDb.exec(sql);
+      const upperSql = sql.toUpperCase();
+      if (upperSql.includes('COMMIT') || upperSql.includes('ROLLBACK')) {
+        inTransaction = false;
+        saveDatabase();
+      } else if (upperSql.includes('BEGIN')) {
+        inTransaction = true;
+      } else {
+        if (!inTransaction) saveDatabase();
+      }
+    } catch (e) {
+      console.error("DB Exec Error:", e);
+      throw e;
+    }
+  }
+};
 
 // Auth Middleware
 const authenticate = (req: any, res: any, next: any) => {
@@ -36,12 +108,10 @@ app.use(express.json());
 app.use(async (req, res, next) => {
   if (!req.path.startsWith('/api') && !req.path.includes('.')) {
     try {
-      if (db) {
-        await db.run("INSERT INTO visits (ip, user_agent) VALUES (?, ?)", [
-          req.ip || req.headers['x-forwarded-for'] || 'unknown',
-          req.headers['user-agent'] || 'unknown'
-        ]);
-      }
+      await db.run("INSERT INTO visits (ip, user_agent) VALUES (?, ?)", [
+        req.ip || req.headers['x-forwarded-for'] || 'unknown',
+        req.headers['user-agent'] || 'unknown'
+      ]);
     } catch (e) {
       console.error("Tracking error:", e);
     }
@@ -243,7 +313,6 @@ app.post("/api/admin/announcement", authenticate, async (req, res) => {
 
 // Automation: Fetch Gold Prices
 async function fetchGoldPrices() {
-  if (!db) return;
   const apiKey = process.env.GOLD_API_KEY;
   
   const insertPrices = async (p24: number, p22: number, p21: number, p18: number) => {
@@ -319,7 +388,6 @@ async function fetchGoldPrices() {
 
 // Automation: Fetch News
 async function fetchNews() {
-  if (!db) return;
   const feeds = [
     { url: "https://www.kitco.com/news/rss/gold.xml", source: "Kitco" },
     { url: "https://www.investing.com/rss/news_95.rss", source: "Investing.com" },
@@ -349,8 +417,6 @@ async function fetchNews() {
 }
 
 async function fetchExchangeRates() {
-  if (!db) return;
-  
   try {
     const response = await axios.get("https://open.er-api.com/v6/latest/USD", { timeout: 10000 });
     const rates = response.data.rates;
@@ -403,10 +469,13 @@ app.get("/sitemap.xml", (req, res) => {
 });
 
 async function initDB() {
-  db = await open({
-    filename: dbPath,
-    driver: sqlite3.Database
-  });
+  const SQL = await initSqlJs();
+  if (fs.existsSync(dbPath)) {
+    const filebuffer = fs.readFileSync(dbPath);
+    sqlJsDb = new SQL.Database(filebuffer);
+  } else {
+    sqlJsDb = new SQL.Database();
+  }
 
   await db.exec(`
     CREATE TABLE IF NOT EXISTS prices (
