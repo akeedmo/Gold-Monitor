@@ -1,7 +1,8 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import Database from "better-sqlite3";
+import sqlite3 from "sqlite3";
+import { open, Database } from "sqlite";
 import axios from "axios";
 import Parser from "rss-parser";
 import bcrypt from "bcryptjs";
@@ -11,91 +12,10 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
-const db = new Database("gold_monitor.db");
+const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+const dbPath = process.env.VERCEL ? "/tmp/gold_monitor.db" : "gold_monitor.db";
+let db: Database;
 const parser = new Parser();
-
-// Database Initialization
-db.exec(`
-  CREATE TABLE IF NOT EXISTS prices (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    price_24k REAL,
-    price_22k REAL,
-    price_21k REAL,
-    price_18k REAL,
-    currency TEXT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS exchange_rates (
-    currency TEXT PRIMARY KEY,
-    rate REAL,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS visits (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ip TEXT,
-    user_agent TEXT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS news (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT,
-    link TEXT,
-    pubDate TEXT,
-    contentSnippet TEXT,
-    source TEXT,
-    likes INTEGER DEFAULT 0,
-    views INTEGER DEFAULT 0,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS settings (
-    key TEXT PRIMARY KEY,
-    value TEXT
-  );
-
-  CREATE TABLE IF NOT EXISTS notifications (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT,
-    message TEXT,
-    sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-`);
-
-// Default Settings
-const defaultSettings = [
-  ['site_name', 'أسعار الذهب المباشرة'],
-  ['primary_color', '#D4AF37'],
-  ['secondary_color', '#000000'],
-  ['ads_header', ''],
-  ['ads_sidebar', ''],
-  ['ads_content', ''],
-  ['admin_email', 'qydalrfyd@gmail.com'],
-  ['monetization_link', 'https://www.google.com/adsense/start/']
-];
-
-const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
-defaultSettings.forEach(([key, value]) => insertSetting.run(key, value));
-
-app.use(express.json());
-
-// Visit Tracking Middleware
-app.use((req, res, next) => {
-  if (!req.path.startsWith('/api') && !req.path.includes('.')) {
-    try {
-      db.prepare("INSERT INTO visits (ip, user_agent) VALUES (?, ?)").run(
-        req.ip || req.headers['x-forwarded-for'] || 'unknown',
-        req.headers['user-agent'] || 'unknown'
-      );
-    } catch (e) {
-      console.error("Tracking error:", e);
-    }
-  }
-  next();
-});
 
 // Auth Middleware
 const authenticate = (req: any, res: any, next: any) => {
@@ -110,12 +30,30 @@ const authenticate = (req: any, res: any, next: any) => {
   }
 };
 
+app.use(express.json());
+
+// Visit Tracking Middleware
+app.use(async (req, res, next) => {
+  if (!req.path.startsWith('/api') && !req.path.includes('.')) {
+    try {
+      if (db) {
+        await db.run("INSERT INTO visits (ip, user_agent) VALUES (?, ?)", [
+          req.ip || req.headers['x-forwarded-for'] || 'unknown',
+          req.headers['user-agent'] || 'unknown'
+        ]);
+      }
+    } catch (e) {
+      console.error("Tracking error:", e);
+    }
+  }
+  next();
+});
+
 // API Routes
 app.post("/api/admin/login", async (req, res) => {
   const { password } = req.body;
   
-  // Check settings table first
-  const storedPass = db.prepare("SELECT value FROM settings WHERE key = 'admin_password'").get() as any;
+  const storedPass = await db.get("SELECT value FROM settings WHERE key = 'admin_password'");
   const adminPass = storedPass ? storedPass.value : (process.env.ADMIN_PASSWORD || 'admin123');
   
   if (password === adminPass) {
@@ -125,85 +63,89 @@ app.post("/api/admin/login", async (req, res) => {
   res.status(401).json({ error: 'كلمة المرور غير صحيحة' });
 });
 
-app.post("/api/admin/change-password", authenticate, (req, res) => {
+app.post("/api/admin/change-password", authenticate, async (req, res) => {
   const { newPassword } = req.body;
   if (!newPassword || newPassword.length < 6) {
     return res.status(400).json({ error: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' });
   }
   
-  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run('admin_password', newPassword);
+  await db.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", ['admin_password', newPassword]);
   res.json({ success: true });
 });
 
-app.get("/api/admin/stats", authenticate, (req, res) => {
-  const totalVisits = db.prepare("SELECT COUNT(*) as count FROM visits").get() as any;
-  const todayVisits = db.prepare("SELECT COUNT(*) as count FROM visits WHERE timestamp > date('now')").get() as any;
-  const weekVisits = db.prepare("SELECT COUNT(*) as count FROM visits WHERE timestamp > date('now', '-7 days')").get() as any;
-  const monthVisits = db.prepare("SELECT COUNT(*) as count FROM visits WHERE timestamp > date('now', '-30 days')").get() as any;
+app.get("/api/admin/stats", authenticate, async (req, res) => {
+  const totalVisits = await db.get("SELECT COUNT(*) as count FROM visits");
+  const todayVisits = await db.get("SELECT COUNT(*) as count FROM visits WHERE timestamp > date('now')");
+  const weekVisits = await db.get("SELECT COUNT(*) as count FROM visits WHERE timestamp > date('now', '-7 days')");
+  const monthVisits = await db.get("SELECT COUNT(*) as count FROM visits WHERE timestamp > date('now', '-30 days')");
   
-  const history = db.prepare(`
+  const history = await db.all(`
     SELECT date(timestamp) as date, COUNT(*) as count 
     FROM visits 
     WHERE timestamp > date('now', '-30 days') 
     GROUP BY date(timestamp)
     ORDER BY date ASC
-  `).all();
+  `);
   
-  const latestPrice = db.prepare("SELECT * FROM prices ORDER BY timestamp DESC LIMIT 1").get();
-  const totalNews = db.prepare("SELECT COUNT(*) as count FROM news").get() as any;
+  const latestPrice = await db.get("SELECT * FROM prices ORDER BY timestamp DESC LIMIT 1");
+  const totalNews = await db.get("SELECT COUNT(*) as count FROM news");
   
   res.json({
-    total: totalVisits.count,
-    today: todayVisits.count,
-    week: weekVisits.count,
-    month: monthVisits.count,
-    history: history,
-    latestPrice,
-    totalNews: totalNews.count
+    total: totalVisits?.count || 0,
+    today: todayVisits?.count || 0,
+    week: weekVisits?.count || 0,
+    month: monthVisits?.count || 0,
+    history: history || [],
+    latestPrice: latestPrice || null,
+    totalNews: totalNews?.count || 0
   });
 });
 
-app.post("/api/admin/settings", authenticate, (req, res) => {
+app.post("/api/admin/settings", authenticate, async (req, res) => {
   const settings = req.body;
-  const updateSetting = db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)");
   
-  db.transaction(() => {
+  await db.exec('BEGIN TRANSACTION');
+  try {
     for (const [key, value] of Object.entries(settings)) {
-      updateSetting.run(key, String(value));
+      await db.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [key, String(value)]);
     }
-  })();
+    await db.exec('COMMIT');
+  } catch (e) {
+    await db.exec('ROLLBACK');
+    return res.status(500).json({ error: 'Failed to update settings' });
+  }
   
   res.json({ success: true });
 });
 
-app.get("/api/prices/latest", (req, res) => {
-  const price = db.prepare("SELECT * FROM prices ORDER BY timestamp DESC LIMIT 1").get();
+app.get("/api/prices/latest", async (req, res) => {
+  const price = await db.get("SELECT * FROM prices ORDER BY timestamp DESC LIMIT 1");
   res.json(price || {});
 });
 
-app.get("/api/prices/history", (req, res) => {
-  const history = db.prepare("SELECT * FROM prices ORDER BY timestamp DESC LIMIT 100").all();
-  res.json(history);
+app.get("/api/prices/history", async (req, res) => {
+  const history = await db.all("SELECT * FROM prices ORDER BY timestamp DESC LIMIT 100");
+  res.json(history || []);
 });
 
-app.get("/api/news", (req, res) => {
-  const news = db.prepare("SELECT * FROM news ORDER BY timestamp DESC LIMIT 50").all();
-  res.json(news);
+app.get("/api/news", async (req, res) => {
+  const news = await db.all("SELECT * FROM news ORDER BY timestamp DESC LIMIT 50");
+  res.json(news || []);
 });
 
-app.post("/api/news/:id/view", (req, res) => {
-  db.prepare("UPDATE news SET views = views + 1 WHERE id = ?").run(req.params.id);
+app.post("/api/news/:id/view", async (req, res) => {
+  await db.run("UPDATE news SET views = views + 1 WHERE id = ?", [req.params.id]);
   res.json({ success: true });
 });
 
-app.post("/api/news/:id/like", (req, res) => {
-  db.prepare("UPDATE news SET likes = likes + 1 WHERE id = ?").run(req.params.id);
+app.post("/api/news/:id/like", async (req, res) => {
+  await db.run("UPDATE news SET likes = likes + 1 WHERE id = ?", [req.params.id]);
   res.json({ success: true });
 });
 
-app.get("/api/exchange-rates", (req, res) => {
-  const rates = db.prepare("SELECT * FROM exchange_rates").all();
-  const ratesObj = rates.reduce((acc: any, curr: any) => {
+app.get("/api/exchange-rates", async (req, res) => {
+  const rates = await db.all("SELECT * FROM exchange_rates");
+  const ratesObj = (rates || []).reduce((acc: any, curr: any) => {
     acc[curr.currency] = curr.rate;
     return acc;
   }, {});
@@ -223,39 +165,30 @@ app.post("/api/refresh", async (req, res) => {
   }
 });
 
-app.post("/api/admin/exchange-rates", authenticate, (req, res) => {
+app.post("/api/admin/exchange-rates", authenticate, async (req, res) => {
   const rates = req.body; // { currency: rate }
-  const updateRate = db.prepare("INSERT OR REPLACE INTO exchange_rates (currency, rate, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)");
   
-  db.transaction(() => {
+  await db.exec('BEGIN TRANSACTION');
+  try {
     for (const [currency, rate] of Object.entries(rates)) {
-      updateRate.run(currency, Number(rate));
+      await db.run("INSERT OR REPLACE INTO exchange_rates (currency, rate, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)", [currency, Number(rate)]);
     }
-  })();
+    await db.exec('COMMIT');
+  } catch (e) {
+    await db.exec('ROLLBACK');
+    return res.status(500).json({ error: 'Failed to update exchange rates' });
+  }
   
   res.json({ success: true });
 });
 
-app.get("/api/settings", (req, res) => {
-  const settings = db.prepare("SELECT * FROM settings").all();
-  const settingsObj = settings.reduce((acc: any, curr: any) => {
+app.get("/api/settings", async (req, res) => {
+  const settings = await db.all("SELECT * FROM settings");
+  const settingsObj = (settings || []).reduce((acc: any, curr: any) => {
     acc[curr.key] = curr.value;
     return acc;
   }, {});
   res.json(settingsObj);
-});
-
-app.post("/api/admin/settings", authenticate, (req, res) => {
-  const settings = req.body;
-  const updateSetting = db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)");
-  
-  db.transaction(() => {
-    for (const [key, value] of Object.entries(settings)) {
-      updateSetting.run(key, String(value));
-    }
-  })();
-  
-  res.json({ success: true });
 });
 
 app.post("/api/admin/notifications", authenticate, async (req, res) => {
@@ -285,45 +218,46 @@ app.post("/api/admin/notifications", authenticate, async (req, res) => {
     }
   }
 
-  db.prepare("INSERT INTO notifications (title, message) VALUES (?, ?)").run(title, message);
+  await db.run("INSERT INTO notifications (title, message) VALUES (?, ?)", [title, message]);
   res.json({ success: true });
 });
 
-app.get("/api/admin/notifications", authenticate, (req, res) => {
-  const notifications = db.prepare("SELECT * FROM notifications ORDER BY sent_at DESC").all();
-  res.json(notifications);
+app.get("/api/admin/notifications", authenticate, async (req, res) => {
+  const notifications = await db.all("SELECT * FROM notifications ORDER BY sent_at DESC");
+  res.json(notifications || []);
 });
 
-app.delete("/api/news/:id", authenticate, (req, res) => {
-  db.prepare("DELETE FROM news WHERE id = ?").run(req.params.id);
+app.delete("/api/news/:id", authenticate, async (req, res) => {
+  await db.run("DELETE FROM news WHERE id = ?", [req.params.id]);
   res.json({ success: true });
 });
 
-app.post("/api/admin/announcement", authenticate, (req, res) => {
+app.post("/api/admin/announcement", authenticate, async (req, res) => {
   const { title, content } = req.body;
-  db.prepare(`
+  await db.run(`
     INSERT INTO news (title, contentSnippet, source, pubDate)
     VALUES (?, ?, ?, ?)
-  `).run(title, content, "إعلان إداري", new Date().toISOString());
+  `, [title, content, "إعلان إداري", new Date().toISOString()]);
   res.json({ success: true });
 });
 
 // Automation: Fetch Gold Prices
 async function fetchGoldPrices() {
+  if (!db) return;
   const apiKey = process.env.GOLD_API_KEY;
   
-  const insertPrices = (p24: number, p22: number, p21: number, p18: number) => {
-    db.prepare(`
+  const insertPrices = async (p24: number, p22: number, p21: number, p18: number) => {
+    await db.run(`
       INSERT INTO prices (price_24k, price_22k, price_21k, price_18k, currency)
       VALUES (?, ?, ?, ?, ?)
-    `).run(p24, p22, p21, p18, 'USD');
+    `, [p24, p22, p21, p18, 'USD']);
     console.log(`Prices updated: 24k=$${p24.toFixed(2)}`);
   };
 
-  const insertMockData = () => {
+  const insertMockData = async () => {
     const spotPrice = 2690 + Math.random() * 20; 
     const p24 = spotPrice / 31.1035;
-    insertPrices(p24, p24 * (22/24), p24 * (21/24), p24 * (18/24));
+    await insertPrices(p24, p24 * (22/24), p24 * (21/24), p24 * (18/24));
   };
 
   // 1. Try Primary API (GoldAPI.io) if key exists
@@ -339,10 +273,10 @@ async function fetchGoldPrices() {
         const p22 = data.price_gram_22k || (p24 * 22/24);
         const p21 = data.price_gram_21k || (p24 * 21/24);
         const p18 = data.price_gram_18k || (p24 * 18/24);
-        insertPrices(p24, p22, p21, p18);
+        await insertPrices(p24, p22, p21, p18);
         return;
       }
-    } catch (error) {
+    } catch (error: any) {
       if (error.response?.status === 403) {
         console.warn("Primary Gold API: Access Forbidden (403). Check your API key.");
       } else {
@@ -356,11 +290,11 @@ async function fetchGoldPrices() {
     const response = await axios.get("https://api.gold-api.com/price/XAU", { timeout: 5000 });
     if (response.data && response.data.price) {
       const p24 = response.data.price / 31.1035;
-      insertPrices(p24, p24 * (22/24), p24 * (21/24), p24 * (18/24));
+      await insertPrices(p24, p24 * (22/24), p24 * (21/24), p24 * (18/24));
       console.log("Updated from secondary free API.");
       return;
     }
-  } catch (error) {
+  } catch (error: any) {
     console.warn(`Secondary Gold API failed: ${error.message}`);
   }
 
@@ -370,21 +304,22 @@ async function fetchGoldPrices() {
     if (response.data && response.data['pax-gold'] && response.data['pax-gold'].usd) {
       const spotPrice = response.data['pax-gold'].usd;
       const p24 = spotPrice / 31.1035;
-      insertPrices(p24, p24 * (22/24), p24 * (21/24), p24 * (18/24));
+      await insertPrices(p24, p24 * (22/24), p24 * (21/24), p24 * (18/24));
       console.log("Updated from CoinGecko (PAXG) fallback.");
       return;
     }
-  } catch (error) {
+  } catch (error: any) {
     console.warn(`Tertiary Gold API failed: ${error.message}`);
   }
 
   // 4. Fallback to Mock Data
   console.log("All APIs failed. Using realistic mock data.");
-  insertMockData();
+  await insertMockData();
 }
 
 // Automation: Fetch News
 async function fetchNews() {
+  if (!db) return;
   const feeds = [
     { url: "https://www.kitco.com/news/rss/gold.xml", source: "Kitco" },
     { url: "https://www.investing.com/rss/news_95.rss", source: "Investing.com" },
@@ -392,20 +327,18 @@ async function fetchNews() {
   ];
 
   try {
-    const insertNews = db.prepare(`
-      INSERT OR IGNORE INTO news (title, link, pubDate, contentSnippet, source)
-      VALUES (?, ?, ?, ?, ?)
-    `);
-    
     for (const feedConfig of feeds) {
       try {
         const feed = await parser.parseURL(feedConfig.url);
         if (feed && feed.items) {
-          feed.items.forEach(item => {
-            insertNews.run(item.title || "No Title", item.link || "#", item.pubDate || new Date().toISOString(), item.contentSnippet || "", feedConfig.source);
-          });
+          for (const item of feed.items) {
+            await db.run(`
+              INSERT OR IGNORE INTO news (title, link, pubDate, contentSnippet, source)
+              VALUES (?, ?, ?, ?, ?)
+            `, [item.title || "No Title", item.link || "#", item.pubDate || new Date().toISOString(), item.contentSnippet || "", feedConfig.source]);
+          }
         }
-      } catch (err) {
+      } catch (err: any) {
         console.warn(`Could not fetch news from ${feedConfig.source}: ${err.message}`);
       }
     }
@@ -416,33 +349,28 @@ async function fetchNews() {
 }
 
 async function fetchExchangeRates() {
-  const insertRate = db.prepare("INSERT OR REPLACE INTO exchange_rates (currency, rate, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)");
+  if (!db) return;
   
   try {
     const response = await axios.get("https://open.er-api.com/v6/latest/USD", { timeout: 10000 });
     const rates = response.data.rates;
     if (rates) {
       const targetCurrencies = ['USD', 'EUR', 'SAR', 'AED', 'GBP', 'KWD', 'QAR', 'BHD', 'OMR', 'JOD', 'EGP', 'LYD', 'YER'];
-      targetCurrencies.forEach(curr => {
+      for (const curr of targetCurrencies) {
         if (rates[curr]) {
           let rate = rates[curr];
-          // Special handling for YER market rate if official is too low
           if (curr === 'YER') {
-            // Insert both Sanaa and Aden rates
-            // Sanaa is usually around 530-540
-            // Aden is usually around 1600-1700
-            insertRate.run('YER_SANAA', 535);
-            insertRate.run('YER_ADEN', 1650);
-            // Keep YER as a fallback (using Aden rate as it's more common for gold trade in market)
+            await db.run("INSERT OR REPLACE INTO exchange_rates (currency, rate, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)", ['YER_SANAA', 535]);
+            await db.run("INSERT OR REPLACE INTO exchange_rates (currency, rate, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)", ['YER_ADEN', 1650]);
             if (rate < 1000) rate = 1650; 
           }
-          insertRate.run(curr, rate);
+          await db.run("INSERT OR REPLACE INTO exchange_rates (currency, rate, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)", [curr, rate]);
         }
-      });
+      }
       console.log("Exchange rates updated from API.");
       return;
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching exchange rates, using defaults:", error.message);
   }
 
@@ -450,9 +378,9 @@ async function fetchExchangeRates() {
   const defaultRates: any = {
     USD: 1, SAR: 3.75, AED: 3.67, KWD: 0.31, QAR: 3.64, BHD: 0.38, OMR: 0.38, EGP: 48.50, JOD: 0.71, LYD: 4.80, EUR: 0.92, GBP: 0.78, YER: 1650, YER_SANAA: 535, YER_ADEN: 1650
   };
-  Object.entries(defaultRates).forEach(([currency, rate]) => {
-    insertRate.run(currency, rate);
-  });
+  for (const [currency, rate] of Object.entries(defaultRates)) {
+    await db.run("INSERT OR REPLACE INTO exchange_rates (currency, rate, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)", [currency, rate]);
+  }
 }
 
 // SEO Routes
@@ -474,33 +402,111 @@ app.get("/sitemap.xml", (req, res) => {
 </urlset>`);
 });
 
-// Run automation
-setInterval(fetchGoldPrices, 5 * 60 * 1000);
-setInterval(fetchNews, 15 * 60 * 1000);
-setInterval(fetchExchangeRates, 60 * 60 * 1000);
+async function initDB() {
+  db = await open({
+    filename: dbPath,
+    driver: sqlite3.Database
+  });
 
-// Initial fetch
-fetchGoldPrices();
-fetchNews();
-fetchExchangeRates();
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS prices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      price_24k REAL,
+      price_22k REAL,
+      price_21k REAL,
+      price_18k REAL,
+      currency TEXT,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS exchange_rates (
+      currency TEXT PRIMARY KEY,
+      rate REAL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS visits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ip TEXT,
+      user_agent TEXT,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS news (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT,
+      link TEXT,
+      pubDate TEXT,
+      contentSnippet TEXT,
+      source TEXT,
+      likes INTEGER DEFAULT 0,
+      views INTEGER DEFAULT 0,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT,
+      message TEXT,
+      sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // Default Settings
+  const defaultSettings = [
+    ['site_name', 'أسعار الذهب المباشرة'],
+    ['primary_color', '#D4AF37'],
+    ['secondary_color', '#000000'],
+    ['ads_header', ''],
+    ['ads_sidebar', ''],
+    ['ads_content', ''],
+    ['admin_email', 'qydalrfyd@gmail.com'],
+    ['monetization_link', 'https://www.google.com/adsense/start/']
+  ];
+
+  for (const [key, value] of defaultSettings) {
+    await db.run('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', [key, value]);
+  }
+}
 
 async function startServer() {
+  await initDB();
+
+  // Run automation
+  setInterval(fetchGoldPrices, 5 * 60 * 1000);
+  setInterval(fetchNews, 15 * 60 * 1000);
+  setInterval(fetchExchangeRates, 60 * 60 * 1000);
+
+  // Initial fetch
+  fetchGoldPrices();
+  fetchNews();
+  fetchExchangeRates();
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
-  } else {
-    app.use(express.static(path.join(__dirname, "dist")));
+  } else if (!process.env.VERCEL) {
+    app.use(express.static(path.join(process.cwd(), "dist")));
     app.get("*", (req, res) => {
-      res.sendFile(path.join(__dirname, "dist", "index.html"));
+      res.sendFile(path.join(process.cwd(), "dist", "index.html"));
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
-  });
+  if (!process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://0.0.0.0:${PORT}`);
+    });
+  }
 }
 
 startServer();
+
+export default app;
