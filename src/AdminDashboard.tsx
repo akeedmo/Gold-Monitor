@@ -20,7 +20,8 @@ import {
   DollarSign,
   Mail,
   Menu,
-  X
+  X,
+  RefreshCw
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -56,6 +57,8 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -66,6 +69,11 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   const [announcementContent, setAnnouncementContent] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
+
+  const showSuccess = (msg: string) => {
+    setSuccessMessage(msg);
+    setTimeout(() => setSuccessMessage(''), 3000);
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,65 +137,84 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   }, [token]);
 
   const handleSaveSettings = async () => {
+    setSaveLoading(true);
+    setError('');
     try {
       await axios.post('/api/admin/settings', settings, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      alert('تم حفظ الإعدادات بنجاح');
+      showSuccess('تم حفظ الإعدادات بنجاح');
     } catch (err) {
-      alert('فشل حفظ الإعدادات');
+      setError('فشل حفظ الإعدادات');
+    } finally {
+      setSaveLoading(false);
     }
   };
 
   const handleSaveRates = async () => {
+    setSaveLoading(true);
+    setError('');
     try {
       await axios.post('/api/admin/exchange-rates', exchangeRates, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      alert('تم حفظ أسعار الصرف بنجاح');
+      showSuccess('تم حفظ أسعار الصرف بنجاح');
     } catch (err) {
-      alert('فشل حفظ أسعار الصرف');
+      setError('فشل حفظ أسعار الصرف');
+    } finally {
+      setSaveLoading(false);
     }
   };
 
   const handleSendNotification = async () => {
+    setSaveLoading(true);
+    setError('');
     try {
       await axios.post('/api/admin/notifications', { title: notifTitle, message: notifMessage }, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      alert('تم إرسال التنبيه بنجاح');
+      showSuccess('تم إرسال التنبيه بنجاح');
       setNotifTitle('');
       setNotifMessage('');
       fetchData();
     } catch (err) {
-      alert('فشل إرسال التنبيه');
+      setError('فشل إرسال التنبيه');
+    } finally {
+      setSaveLoading(false);
     }
   };
 
   const handlePostAnnouncement = async () => {
+    setSaveLoading(true);
+    setError('');
     try {
       await axios.post('/api/admin/announcement', { title: announcementTitle, content: announcementContent }, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      alert('تم نشر الإعلان بنجاح');
+      showSuccess('تم نشر الإعلان بنجاح');
       setAnnouncementTitle('');
       setAnnouncementContent('');
       fetchData();
     } catch (err) {
-      alert('فشل نشر الإعلان');
+      setError('فشل نشر الإعلان');
+    } finally {
+      setSaveLoading(false);
     }
   };
 
   const handleDeleteNews = async (id: number) => {
     if (!confirm('هل أنت متأكد من حذف هذا الخبر؟')) return;
+    setLoading(true);
     try {
       await axios.delete(`/api/news/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      alert('تم حذف الخبر بنجاح');
+      showSuccess('تم حذف الخبر بنجاح');
       fetchData();
     } catch (err) {
-      alert('فشل حذف الخبر');
+      setError('فشل حذف الخبر');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -293,10 +320,34 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
               {activeTab === 'settings' && 'إعدادات الموقع'}
               {activeTab === 'monetization' && 'الربح من الإعلانات'}
             </h1>
-            <button onClick={onBack} className="flex items-center gap-2 text-primary font-bold hover:gap-3 transition-all">
-              <ArrowLeft size={18} />
-              العودة للموقع
-            </button>
+            <div className="flex items-center gap-4">
+              <AnimatePresence>
+                {successMessage && (
+                  <motion.div 
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    className="bg-green-500/20 text-green-400 px-4 py-2 rounded-xl text-sm font-bold border border-green-500/30"
+                  >
+                    {successMessage}
+                  </motion.div>
+                )}
+                {error && (
+                  <motion.div 
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    className="bg-red-500/20 text-red-400 px-4 py-2 rounded-xl text-sm font-bold border border-red-500/30"
+                  >
+                    {error}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              <button onClick={onBack} className="flex items-center gap-2 text-primary font-bold hover:gap-3 transition-all">
+                <ArrowLeft size={18} />
+                العودة للموقع
+              </button>
+            </div>
           </div>
 
           {activeTab === 'overview' && stats && (
@@ -357,8 +408,8 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                     onChange={(e) => setNotifMessage(e.target.value)}
                     className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-primary"
                   />
-                  <button onClick={handleSendNotification} className="w-full py-3 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all">
-                    إرسال الآن
+                  <button onClick={handleSendNotification} disabled={saveLoading} className="w-full py-3 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                    {saveLoading ? <RefreshCw className="animate-spin" size={18} /> : 'إرسال الآن'}
                   </button>
                 </div>
               </div>
@@ -449,8 +500,8 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                     className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-primary"
                   />
                 </div>
-                <button onClick={handlePostAnnouncement} className="py-3 px-8 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all">
-                  نشر الإعلان
+                <button onClick={handlePostAnnouncement} disabled={saveLoading} className="py-3 px-8 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                  {saveLoading ? <RefreshCw className="animate-spin" size={18} /> : 'نشر الإعلان'}
                 </button>
               </div>
 
@@ -549,9 +600,9 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                 </div>
 
                 <div className="pt-4">
-                  <button onClick={handleSaveRates} className="w-full py-4 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-xl">
-                    <Save size={20} />
-                    حفظ أسعار الصرف
+                  <button onClick={handleSaveRates} disabled={saveLoading} className="w-full py-4 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-xl disabled:opacity-50">
+                    {saveLoading ? <RefreshCw className="animate-spin" size={20} /> : <Save size={20} />}
+                    {saveLoading ? 'جاري الحفظ...' : 'حفظ أسعار الصرف'}
                   </button>
                 </div>
               </div>
@@ -651,9 +702,9 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
               </div>
 
               <div className="lg:col-span-2">
-                <button onClick={handleSaveSettings} className="w-full py-4 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-xl">
-                  <Save size={20} />
-                  حفظ جميع الإعدادات
+                <button onClick={handleSaveSettings} disabled={saveLoading} className="w-full py-4 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-xl disabled:opacity-50">
+                  {saveLoading ? <RefreshCw className="animate-spin" size={20} /> : <Save size={20} />}
+                  {saveLoading ? 'جاري الحفظ...' : 'حفظ جميع الإعدادات'}
                 </button>
               </div>
 
@@ -712,9 +763,9 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                     فتح لوحة تحكم AdSense <ChevronRight size={16} />
                   </a>
                 </div>
-                <button onClick={handleSaveSettings} className="w-full py-4 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-xl">
-                  <Save size={20} />
-                  حفظ التغييرات
+                <button onClick={handleSaveSettings} disabled={saveLoading} className="w-full py-4 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-xl disabled:opacity-50">
+                  {saveLoading ? <RefreshCw className="animate-spin" size={20} /> : <Save size={20} />}
+                  {saveLoading ? 'جاري الحفظ...' : 'حفظ التغييرات'}
                 </button>
               </div>
             </div>

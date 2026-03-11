@@ -210,6 +210,19 @@ app.get("/api/exchange-rates", (req, res) => {
   res.json(ratesObj);
 });
 
+app.post("/api/refresh", async (req, res) => {
+  try {
+    await Promise.all([
+      fetchGoldPrices(),
+      fetchNews(),
+      fetchExchangeRates()
+    ]);
+    res.json({ success: true, message: "Data refreshed from external sources" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to refresh data" });
+  }
+});
+
 app.post("/api/admin/exchange-rates", authenticate, (req, res) => {
   const rates = req.body; // { currency: rate }
   const updateRate = db.prepare("INSERT OR REPLACE INTO exchange_rates (currency, rate, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)");
@@ -230,6 +243,19 @@ app.get("/api/settings", (req, res) => {
     return acc;
   }, {});
   res.json(settingsObj);
+});
+
+app.post("/api/admin/settings", authenticate, (req, res) => {
+  const settings = req.body;
+  const updateSetting = db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)");
+  
+  db.transaction(() => {
+    for (const [key, value] of Object.entries(settings)) {
+      updateSetting.run(key, String(value));
+    }
+  })();
+  
+  res.json({ success: true });
 });
 
 app.post("/api/admin/notifications", authenticate, async (req, res) => {
@@ -305,7 +331,7 @@ async function fetchGoldPrices() {
     try {
       const response = await axios.get("https://www.goldapi.io/api/XAU/USD", {
         headers: { "x-access-token": apiKey },
-        timeout: 8000
+        timeout: 5000
       });
       const data = response.data;
       if (data && (data.price_gram_24k || data.price)) {
@@ -317,13 +343,17 @@ async function fetchGoldPrices() {
         return;
       }
     } catch (error) {
-      console.error("Primary Gold API failed:", error.message);
+      if (error.response?.status === 403) {
+        console.warn("Primary Gold API: Access Forbidden (403). Check your API key.");
+      } else {
+        console.warn(`Primary Gold API failed: ${error.message}`);
+      }
     }
   }
 
   // 2. Try Secondary Free API (Gold-API.com)
   try {
-    const response = await axios.get("https://api.gold-api.com/price/XAU", { timeout: 8000 });
+    const response = await axios.get("https://api.gold-api.com/price/XAU", { timeout: 5000 });
     if (response.data && response.data.price) {
       const p24 = response.data.price / 31.1035;
       insertPrices(p24, p24 * (22/24), p24 * (21/24), p24 * (18/24));
@@ -331,10 +361,24 @@ async function fetchGoldPrices() {
       return;
     }
   } catch (error) {
-    console.error("Secondary Gold API failed:", error.message);
+    console.warn(`Secondary Gold API failed: ${error.message}`);
   }
 
-  // 3. Fallback to Mock Data
+  // 3. Try Tertiary Fallback (CoinGecko PAXG - tracks gold price)
+  try {
+    const response = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=pax-gold&vs_currencies=usd", { timeout: 5000 });
+    if (response.data && response.data['pax-gold'] && response.data['pax-gold'].usd) {
+      const spotPrice = response.data['pax-gold'].usd;
+      const p24 = spotPrice / 31.1035;
+      insertPrices(p24, p24 * (22/24), p24 * (21/24), p24 * (18/24));
+      console.log("Updated from CoinGecko (PAXG) fallback.");
+      return;
+    }
+  } catch (error) {
+    console.warn(`Tertiary Gold API failed: ${error.message}`);
+  }
+
+  // 4. Fallback to Mock Data
   console.log("All APIs failed. Using realistic mock data.");
   insertMockData();
 }
@@ -342,8 +386,9 @@ async function fetchGoldPrices() {
 // Automation: Fetch News
 async function fetchNews() {
   const feeds = [
-    { url: "https://www.kitco.com/rss/gold-news/", source: "Kitco" },
-    { url: "https://www.gold.org/rss/news", source: "Gold.org" }
+    { url: "https://www.kitco.com/news/rss/gold.xml", source: "Kitco" },
+    { url: "https://www.investing.com/rss/news_95.rss", source: "Investing.com" },
+    { url: "https://www.fxstreet.com/rss/news/commodities/gold", source: "FXStreet" }
   ];
 
   try {
@@ -355,14 +400,16 @@ async function fetchNews() {
     for (const feedConfig of feeds) {
       try {
         const feed = await parser.parseURL(feedConfig.url);
-        feed.items.forEach(item => {
-          insertNews.run(item.title, item.link, item.pubDate, item.contentSnippet, feedConfig.source);
-        });
+        if (feed && feed.items) {
+          feed.items.forEach(item => {
+            insertNews.run(item.title || "No Title", item.link || "#", item.pubDate || new Date().toISOString(), item.contentSnippet || "", feedConfig.source);
+          });
+        }
       } catch (err) {
-        console.error(`Error fetching news from ${feedConfig.source}:`, err);
+        console.warn(`Could not fetch news from ${feedConfig.source}: ${err.message}`);
       }
     }
-    console.log("News updated from all sources.");
+    console.log("News updated from available sources.");
   } catch (error) {
     console.error("Error in fetchNews process:", error);
   }

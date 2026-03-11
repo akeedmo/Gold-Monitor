@@ -580,12 +580,19 @@ const GoldCalculator = ({ prices, currency, amount, setAmount, type, setType }: 
 
 const BottomNav = ({ onRefresh }: { onRefresh: () => void }) => {
   const location = useLocation();
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const navItems = [
     { id: '/', label: 'الرئيسية', icon: Layout, path: '/' },
     { id: '/charts', label: 'الرسوم', icon: BarChart2, path: '/charts' },
     { id: '/news', label: 'الأخبار', icon: Newspaper, path: '/news' },
     { id: '/tips', label: 'نصائح', icon: Lightbulb, path: '/tips' },
   ];
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await onRefresh();
+    setTimeout(() => setIsRefreshing(false), 1000);
+  };
 
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-gold/20 px-4 py-2 flex justify-between items-center z-[100] shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
@@ -602,14 +609,12 @@ const BottomNav = ({ onRefresh }: { onRefresh: () => void }) => {
         </Link>
       ))}
       <button
-        onClick={() => {
-          onRefresh();
-          // Add a small visual feedback if needed, but the parent will handle data fetch
-        }}
-        className="flex flex-col items-center gap-1 text-gray-500 hover:text-primary transition-all active:scale-95"
+        onClick={handleRefresh}
+        disabled={isRefreshing}
+        className={`flex flex-col items-center gap-1 transition-all active:scale-95 ${isRefreshing ? 'text-primary' : 'text-gray-500 hover:text-primary'}`}
       >
-        <RefreshCw size={20} className="hover:rotate-180 transition-transform duration-500" />
-        <span className="text-[10px] font-bold">تحديث</span>
+        <RefreshCw size={20} className={isRefreshing ? 'animate-spin' : 'hover:rotate-180 transition-transform duration-500'} />
+        <span className="text-[10px] font-bold">{isRefreshing ? 'تحديث...' : 'تحديث'}</span>
       </button>
     </div>
   );
@@ -658,10 +663,13 @@ function AppContent() {
     window.scrollTo(0, 0);
   }, [location.pathname]);
 
-  const fetchData = async () => {
+  const fetchData = async (force = false) => {
     const isInitial = prices[0].price === 0;
     if (isInitial) setLoading(true);
     try {
+      if (force) {
+        await axios.post('/api/refresh');
+      }
       const [priceRes, historyRes, newsRes, ratesRes] = await Promise.all([
         axios.get('/api/prices/latest'),
         axios.get('/api/prices/history'),
@@ -876,7 +884,7 @@ function AppContent() {
         </Routes>
       </main>
 
-      <BottomNav onRefresh={fetchData} />
+      <BottomNav onRefresh={() => fetchData(true)} />
 
       <footer className="bg-card border-t border-gold/20 py-12 px-6 mt-auto pb-32 md:pb-12 text-center">
         <div className="max-w-7xl mx-auto space-y-8">
