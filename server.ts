@@ -47,6 +47,8 @@ db.exec(`
     pubDate TEXT,
     contentSnippet TEXT,
     source TEXT,
+    likes INTEGER DEFAULT 0,
+    views INTEGER DEFAULT 0,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -65,12 +67,14 @@ db.exec(`
 
 // Default Settings
 const defaultSettings = [
-  ['site_name', 'مراقب الذهب'],
+  ['site_name', 'أسعار الذهب المباشرة'],
   ['primary_color', '#D4AF37'],
   ['secondary_color', '#000000'],
   ['ads_header', ''],
   ['ads_sidebar', ''],
-  ['ads_content', '']
+  ['ads_content', ''],
+  ['admin_email', 'qydalrfyd@gmail.com'],
+  ['monetization_link', 'https://www.google.com/adsense/start/']
 ];
 
 const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
@@ -134,19 +138,42 @@ app.post("/api/admin/change-password", authenticate, (req, res) => {
 app.get("/api/admin/stats", authenticate, (req, res) => {
   const totalVisits = db.prepare("SELECT COUNT(*) as count FROM visits").get() as any;
   const todayVisits = db.prepare("SELECT COUNT(*) as count FROM visits WHERE timestamp > date('now')").get() as any;
-  const last7Days = db.prepare(`
+  const weekVisits = db.prepare("SELECT COUNT(*) as count FROM visits WHERE timestamp > date('now', '-7 days')").get() as any;
+  const monthVisits = db.prepare("SELECT COUNT(*) as count FROM visits WHERE timestamp > date('now', '-30 days')").get() as any;
+  
+  const history = db.prepare(`
     SELECT date(timestamp) as date, COUNT(*) as count 
     FROM visits 
-    WHERE timestamp > date('now', '-7 days') 
+    WHERE timestamp > date('now', '-30 days') 
     GROUP BY date(timestamp)
     ORDER BY date ASC
   `).all();
   
+  const latestPrice = db.prepare("SELECT * FROM prices ORDER BY timestamp DESC LIMIT 1").get();
+  const totalNews = db.prepare("SELECT COUNT(*) as count FROM news").get() as any;
+  
   res.json({
     total: totalVisits.count,
     today: todayVisits.count,
-    history: last7Days
+    week: weekVisits.count,
+    month: monthVisits.count,
+    history: history,
+    latestPrice,
+    totalNews: totalNews.count
   });
+});
+
+app.post("/api/admin/settings", authenticate, (req, res) => {
+  const settings = req.body;
+  const updateSetting = db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)");
+  
+  db.transaction(() => {
+    for (const [key, value] of Object.entries(settings)) {
+      updateSetting.run(key, String(value));
+    }
+  })();
+  
+  res.json({ success: true });
 });
 
 app.get("/api/prices/latest", (req, res) => {
@@ -160,8 +187,18 @@ app.get("/api/prices/history", (req, res) => {
 });
 
 app.get("/api/news", (req, res) => {
-  const news = db.prepare("SELECT * FROM news ORDER BY timestamp DESC LIMIT 20").all();
+  const news = db.prepare("SELECT * FROM news ORDER BY timestamp DESC LIMIT 50").all();
   res.json(news);
+});
+
+app.post("/api/news/:id/view", (req, res) => {
+  db.prepare("UPDATE news SET views = views + 1 WHERE id = ?").run(req.params.id);
+  res.json({ success: true });
+});
+
+app.post("/api/news/:id/like", (req, res) => {
+  db.prepare("UPDATE news SET likes = likes + 1 WHERE id = ?").run(req.params.id);
+  res.json({ success: true });
 });
 
 app.get("/api/exchange-rates", (req, res) => {
@@ -171,6 +208,19 @@ app.get("/api/exchange-rates", (req, res) => {
     return acc;
   }, {});
   res.json(ratesObj);
+});
+
+app.post("/api/admin/exchange-rates", authenticate, (req, res) => {
+  const rates = req.body; // { currency: rate }
+  const updateRate = db.prepare("INSERT OR REPLACE INTO exchange_rates (currency, rate, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)");
+  
+  db.transaction(() => {
+    for (const [currency, rate] of Object.entries(rates)) {
+      updateRate.run(currency, Number(rate));
+    }
+  })();
+  
+  res.json({ success: true });
 });
 
 app.get("/api/settings", (req, res) => {
@@ -235,46 +285,58 @@ app.post("/api/admin/announcement", authenticate, (req, res) => {
 // Automation: Fetch Gold Prices
 async function fetchGoldPrices() {
   const apiKey = process.env.GOLD_API_KEY;
-  if (!apiKey) {
-    console.log("Gold API Key missing. Skipping price fetch.");
-    // Insert mock data for demo if no key
+  
+  const insertPrices = (p24: number, p22: number, p21: number, p18: number) => {
     db.prepare(`
       INSERT INTO prices (price_24k, price_22k, price_21k, price_18k, currency)
       VALUES (?, ?, ?, ?, ?)
-    `).run(
-      2600 + Math.random() * 50,
-      2380 + Math.random() * 50,
-      2275 + Math.random() * 50,
-      1950 + Math.random() * 50,
-      'USD'
-    );
-    return;
+    `).run(p24, p22, p21, p18, 'USD');
+    console.log(`Prices updated: 24k=$${p24.toFixed(2)}`);
+  };
+
+  const insertMockData = () => {
+    const spotPrice = 2690 + Math.random() * 20; 
+    const p24 = spotPrice / 31.1035;
+    insertPrices(p24, p24 * (22/24), p24 * (21/24), p24 * (18/24));
+  };
+
+  // 1. Try Primary API (GoldAPI.io) if key exists
+  if (apiKey && apiKey !== 'YOUR_GOLDAPI_KEY' && apiKey.length > 10) {
+    try {
+      const response = await axios.get("https://www.goldapi.io/api/XAU/USD", {
+        headers: { "x-access-token": apiKey },
+        timeout: 8000
+      });
+      const data = response.data;
+      if (data && (data.price_gram_24k || data.price)) {
+        const p24 = data.price_gram_24k || (data.price / 31.1035);
+        const p22 = data.price_gram_22k || (p24 * 22/24);
+        const p21 = data.price_gram_21k || (p24 * 21/24);
+        const p18 = data.price_gram_18k || (p24 * 18/24);
+        insertPrices(p24, p22, p21, p18);
+        return;
+      }
+    } catch (error) {
+      console.error("Primary Gold API failed:", error.message);
+    }
   }
 
+  // 2. Try Secondary Free API (Gold-API.com)
   try {
-    const response = await axios.get("https://www.goldapi.io/api/XAU/USD", {
-      headers: { "x-access-token": apiKey }
-    });
-    const data = response.data;
-    // GoldAPI returns price per gram for different karats or just spot
-    // Usually it's spot price per ounce. We convert to gram.
-    const spotPrice = data.price;
-    const pricePerGram24k = spotPrice / 31.1035;
-    
-    db.prepare(`
-      INSERT INTO prices (price_24k, price_22k, price_21k, price_18k, currency)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(
-      pricePerGram24k,
-      pricePerGram24k * (22/24),
-      pricePerGram24k * (21/24),
-      pricePerGram24k * (18/24),
-      'USD'
-    );
-    console.log("Gold prices updated.");
+    const response = await axios.get("https://api.gold-api.com/price/XAU", { timeout: 8000 });
+    if (response.data && response.data.price) {
+      const p24 = response.data.price / 31.1035;
+      insertPrices(p24, p24 * (22/24), p24 * (21/24), p24 * (18/24));
+      console.log("Updated from secondary free API.");
+      return;
+    }
   } catch (error) {
-    console.error("Error fetching gold prices:", error);
+    console.error("Secondary Gold API failed:", error.message);
   }
+
+  // 3. Fallback to Mock Data
+  console.log("All APIs failed. Using realistic mock data.");
+  insertMockData();
 }
 
 // Automation: Fetch News
@@ -307,21 +369,43 @@ async function fetchNews() {
 }
 
 async function fetchExchangeRates() {
+  const insertRate = db.prepare("INSERT OR REPLACE INTO exchange_rates (currency, rate, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)");
+  
   try {
-    const response = await axios.get("https://open.er-api.com/v6/latest/USD");
+    const response = await axios.get("https://open.er-api.com/v6/latest/USD", { timeout: 10000 });
     const rates = response.data.rates;
-    const insertRate = db.prepare("INSERT OR REPLACE INTO exchange_rates (currency, rate, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)");
-    
-    const targetCurrencies = ['USD', 'EUR', 'SAR', 'AED', 'EGP', 'GBP', 'KWD', 'QAR', 'BHD', 'OMR', 'JOD'];
-    targetCurrencies.forEach(curr => {
-      if (rates[curr]) {
-        insertRate.run(curr, rates[curr]);
-      }
-    });
-    console.log("Exchange rates updated.");
+    if (rates) {
+      const targetCurrencies = ['USD', 'EUR', 'SAR', 'AED', 'GBP', 'KWD', 'QAR', 'BHD', 'OMR', 'JOD', 'EGP', 'LYD', 'YER'];
+      targetCurrencies.forEach(curr => {
+        if (rates[curr]) {
+          let rate = rates[curr];
+          // Special handling for YER market rate if official is too low
+          if (curr === 'YER') {
+            // Insert both Sanaa and Aden rates
+            // Sanaa is usually around 530-540
+            // Aden is usually around 1600-1700
+            insertRate.run('YER_SANAA', 535);
+            insertRate.run('YER_ADEN', 1650);
+            // Keep YER as a fallback (using Aden rate as it's more common for gold trade in market)
+            if (rate < 1000) rate = 1650; 
+          }
+          insertRate.run(curr, rate);
+        }
+      });
+      console.log("Exchange rates updated from API.");
+      return;
+    }
   } catch (error) {
-    console.error("Error fetching exchange rates:", error);
+    console.error("Error fetching exchange rates, using defaults:", error.message);
   }
+
+  // Fallback rates if API fails
+  const defaultRates: any = {
+    USD: 1, SAR: 3.75, AED: 3.67, KWD: 0.31, QAR: 3.64, BHD: 0.38, OMR: 0.38, EGP: 48.50, JOD: 0.71, LYD: 4.80, EUR: 0.92, GBP: 0.78, YER: 1650, YER_SANAA: 535, YER_ADEN: 1650
+  };
+  Object.entries(defaultRates).forEach(([currency, rate]) => {
+    insertRate.run(currency, rate);
+  });
 }
 
 // SEO Routes

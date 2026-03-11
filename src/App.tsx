@@ -2,1247 +2,914 @@ import React, { useState, useEffect } from 'react';
 import { 
   TrendingUp, 
   TrendingDown, 
-  Newspaper, 
-  Info, 
-  Settings, 
+  Coins, 
+  Globe, 
+  Clock, 
+  ChevronRight, 
   Bell, 
-  Menu, 
-  X, 
-  ChevronLeft,
-  ChevronRight,
-  LayoutDashboard,
-  LogOut,
-  BarChart3,
-  Lightbulb,
+  Menu,
+  RefreshCw,
   Calculator,
-  Facebook,
-  Twitter,
-  Instagram,
-  Users,
-  RefreshCw
+  Newspaper,
+  BarChart2,
+  Info,
+  Lightbulb,
+  ArrowLeft,
+  ArrowRight,
+  Mail,
+  Layout,
+  Settings,
+  Eye
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip as ChartTooltip,
-  Filler,
-  Legend,
-} from 'chart.js';
-import { Line } from 'react-chartjs-2';
-import { Helmet, HelmetProvider } from 'react-helmet-async';
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  ChartTooltip,
-  Filler,
-  Legend
-);
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  LineChart,
+  Line
+} from 'recharts';
+import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
-import { format } from 'date-fns';
-import { ar } from 'date-fns/locale';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
+import { Helmet, HelmetProvider } from 'react-helmet-async';
+import AdminDashboard from './AdminDashboard';
+
+// --- Types ---
+interface GoldPrice {
+  id: string;
+  type: string;
+  price: number;
+  change: number;
+  changePercent: number;
+}
+
+interface ChartData {
+  time: string;
+  value: number;
+}
+
+interface NewsItem {
+  id: number;
+  title: string;
+  link: string;
+  pubDate: string;
+  contentSnippet: string;
+  source: string;
+}
 
 // --- Components ---
 
-const BottomNav = ({ activePage, setActivePage, onRefresh, refreshing }: any) => {
-  const navItems = [
-    { id: 'home', label: 'الرئيسية', icon: LayoutDashboard },
-    { id: 'charts', label: 'الرسوم', icon: BarChart3 },
-    { id: 'news', label: 'الأخبار', icon: Newspaper },
-    { id: 'tips', label: 'نصائح', icon: Lightbulb },
-  ];
-
+const TickerBar = ({ prices, currency }: { prices: GoldPrice[], currency: string }) => {
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 bg-black/90 border-t border-gold/20 backdrop-blur-lg z-50 px-4 py-2">
-      <div className="flex justify-around items-center">
-        {navItems.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setActivePage(item.id)}
-            className={`flex flex-col items-center gap-1 p-2 transition-colors ${
-              activePage === item.id ? 'text-gold' : 'text-gray-500'
-            }`}
-          >
-            <item.icon className="w-6 h-6" />
-            <span className="text-[10px] font-medium">{item.label}</span>
-          </button>
-        ))}
-        <button
-          onClick={onRefresh}
-          disabled={refreshing}
-          className={`flex flex-col items-center gap-1 p-2 transition-colors ${refreshing ? 'text-gold animate-spin' : 'text-gray-500'}`}
-        >
-          <RefreshCw className="w-6 h-6" />
-          <span className="text-[10px] font-medium">تحديث</span>
-        </button>
-      </div>
-    </div>
-  );
-};
-
-const Navbar = ({ activePage, setActivePage, settings, selectedCurrency, setSelectedCurrency, onRefresh, refreshing }: any) => {
-  const [isOpen, setIsOpen] = useState(false);
-
-  const navItems = [
-    { id: 'home', label: 'الرئيسية', icon: LayoutDashboard },
-    { id: 'charts', label: 'الرسوم البيانية', icon: BarChart3 },
-    { id: 'news', label: 'الأخبار', icon: Newspaper },
-    { id: 'tips', label: 'نصائح الاستثمار', icon: Lightbulb },
-    { id: 'about', label: 'عن الموقع', icon: Info },
-  ];
-
-  const currencies = [
-    { code: 'USD', label: 'USD - دولار أمريكي' },
-    { code: 'EUR', label: 'EUR - يورو' },
-    { code: 'SAR', label: 'SAR - ريال سعودي' },
-    { code: 'AED', label: 'AED - درهم إماراتي' },
-    { code: 'EGP', label: 'EGP - جنيه مصري' },
-    { code: 'GBP', label: 'GBP - جنيه إسترليني' },
-    { code: 'KWD', label: 'KWD - دينار كويتي' },
-  ];
-
-  return (
-    <nav className="bg-black/90 border-b border-gold/20 sticky top-0 z-50 backdrop-blur-md">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-20">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 gold-gradient rounded-lg flex items-center justify-center shadow-lg shadow-gold/20">
-              <TrendingUp className="text-black w-6 h-6" />
-            </div>
-            <span className="text-2xl font-bold gold-text tracking-tight">
-              {settings.site_name || 'مراقب الذهب'}
+    <div className="bg-[#050505] text-primary py-2 overflow-hidden whitespace-nowrap border-b border-gold/20">
+      <div className="flex gap-12 items-center ticker-animation">
+        {[...prices, ...prices, ...prices, ...prices].map((item, idx) => (
+          <div key={`${item.id}-${idx}`} className="flex items-center gap-3">
+            <span className="font-bold text-sm">{item.type} - {item.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency}</span>
+            <span className={`text-xs ${item.change >= 0 ? "text-up" : "text-down"}`}>
+              {item.change >= 0 ? '▲' : '▼'} {Math.abs(item.changePercent).toFixed(2)}%
             </span>
           </div>
+        ))}
+      </div>
+    </div>
+  );
+};
 
-          {/* Desktop Menu */}
-          <div className="hidden md:flex items-center gap-6">
-            <div className="flex items-baseline space-x-reverse space-x-4">
-              {navItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => setActivePage(item.id)}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 flex items-center gap-2 ${
-                    activePage === item.id 
-                    ? 'bg-gold text-black shadow-lg shadow-gold/20' 
-                    : 'text-gray-300 hover:text-gold hover:bg-white/5'
-                  }`}
-                >
-                  <item.icon className="w-4 h-4" />
-                  {item.label}
-                </button>
-              ))}
-            </div>
+const AdPlaceholder = ({ type }: { type: 'header' | 'sidebar' | 'content' }) => {
+  const [settings, setSettings] = useState<any>({});
+  useEffect(() => {
+    axios.get('/api/settings').then(res => setSettings(res.data));
+  }, []);
 
-            <div className="flex items-center gap-4 border-r border-white/10 pr-6">
-              {settings.ad_link && (
-                <a 
-                  href={settings.ad_link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hidden lg:flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-lg text-xs font-bold hover:bg-emerald-500/20 transition-all animate-pulse"
-                >
-                  <TrendingUp className="w-3 h-3" />
-                  عروض حصرية
-                </a>
-              )}
-              <select
-                value={selectedCurrency}
-                onChange={(e) => setSelectedCurrency(e.target.value)}
-                className="bg-zinc-900 text-gold border border-gold/20 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-gold transition-colors cursor-pointer"
-              >
-                {currencies.map(c => (
-                  <option key={c.code} value={c.code}>{c.label}</option>
-                ))}
-              </select>
-              <button
-                onClick={onRefresh}
-                disabled={refreshing}
-                className={`p-2 transition-colors ${refreshing ? 'text-gold animate-spin' : 'text-gray-400 hover:text-gold'}`}
-                title="تحديث الأسعار"
-              >
-                <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
-              </button>
-              <button
-                onClick={() => setActivePage('admin')}
-                className="p-2 text-gray-400 hover:text-gold transition-colors"
-              >
-                <Settings className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
+  const adCode = settings[`ads_${type}`];
+  if (adCode) {
+    return <div className="ad-container my-4 overflow-hidden flex justify-center" dangerouslySetInnerHTML={{ __html: adCode }} />;
+  }
 
-          {/* Mobile menu button */}
-          <div className="md:hidden flex items-center gap-4">
-            <select
-              value={selectedCurrency}
-              onChange={(e) => setSelectedCurrency(e.target.value)}
-              className="bg-zinc-900 text-gold border border-gold/20 rounded-lg px-2 py-1 text-xs outline-none"
-            >
-              {currencies.map(c => (
-                <option key={c.code} value={c.code}>{c.code}</option>
-              ))}
-            </select>
-            <button
-              onClick={() => setActivePage('admin')}
-              className="p-2 text-gray-400 hover:text-gold"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => setIsOpen(!isOpen)}
-              className="inline-flex items-center justify-center p-2 rounded-md text-gold hover:bg-white/5 focus:outline-none"
-            >
-              {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-            </button>
-          </div>
+  return (
+    <div className={`bg-gray-100 border border-dashed border-gray-300 rounded-xl flex items-center justify-center text-gray-400 text-[10px] font-bold uppercase tracking-widest my-4 ${type === 'sidebar' ? 'h-64' : 'h-24 w-full'}`}>
+      إعلان {type === 'header' ? 'الهيدر' : type === 'sidebar' ? 'جانبي' : 'وسط المحتوى'}
+    </div>
+  );
+};
+
+const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate, setCurrency, calcAmount, setCalcAmount, calcType, setCalcType }: any) => {
+  return (
+    <div className="space-y-8 pb-24 md:pb-8">
+      <Helmet>
+        <title>أسعار الذهب المباشرة | مراقب الذهب</title>
+        <meta name="description" content="تابع أسعار الذهب العالمية والمحلية لحظة بلحظة مع رسوم بيانية تفاعلية وأحدث الأخبار الاقتصادية." />
+        <meta name="keywords" content="أسعار الذهب اليوم, سعر الذهب مباشر, الذهب في السعودية, الذهب في الإمارات, الذهب في الكويت, الذهب في قطر, الذهب في البحرين, الذهب في عمان, حاسبة الذهب, اخبار الذهب اليوم" />
+      </Helmet>
+
+      {/* Welcome */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-bold gold-text-gradient">نظرة عامة على السوق</h2>
+          <p className="text-sm text-gray-500 mt-1">آخر تحديث: {lastUpdate.toLocaleTimeString()}</p>
+        </div>
+        <div className="flex items-center gap-2 text-xs font-bold text-up bg-up/10 px-3 py-1.5 rounded-full">
+          <div className="w-2 h-2 rounded-full bg-up animate-pulse" />
+          السوق مباشر
         </div>
       </div>
 
-      {/* Mobile Menu */}
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="md:hidden bg-black/95 border-b border-gold/10 overflow-hidden"
-          >
-            <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-              {navItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setActivePage(item.id);
-                    setIsOpen(false);
-                  }}
-                  className={`block w-full text-right px-3 py-4 rounded-md text-base font-medium flex items-center gap-3 ${
-                    activePage === item.id 
-                    ? 'bg-gold text-black' 
-                    : 'text-gray-300 hover:bg-white/5 hover:text-gold'
-                  }`}
-                >
-                  <item.icon className="w-5 h-5" />
-                  {item.label}
-                </button>
-              ))}
+      {/* Price Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {prices.map((item: any) => (
+          <motion.div key={item.id} whileHover={{ y: -5 }} className="bg-card p-6 rounded-2xl border border-gold/10 card-shadow transition-all">
+            <div className="flex justify-between items-start mb-4">
+              <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center text-primary">
+                <Coins size={20} />
+              </div>
+              <div className={`text-xs font-bold px-2 py-1 rounded-full ${item.change >= 0 ? 'bg-up/10 text-up' : 'bg-down/10 text-down'}`}>
+                {item.change >= 0 ? '+' : ''}{item.changePercent.toFixed(2)}%
+              </div>
+            </div>
+            <h3 className="text-gray-500 text-xs font-bold mb-1">{item.type}</h3>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-white">
+                {item.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+              <span className="text-primary text-xs font-bold">{currency}</span>
             </div>
           </motion.div>
-        )}
-      </AnimatePresence>
-    </nav>
-  );
-};
-
-const PriceCard = ({ title, price, unit = 'جرام', currency = 'USD', exchangeRate = 1 }: any) => {
-  const convertedPrice = price ? price * exchangeRate : null;
-
-  return (
-    <motion.div
-      whileHover={{ y: -5 }}
-      className="bg-zinc-900/50 border border-white/5 p-6 rounded-2xl hover:border-gold/30 transition-all duration-300 group relative overflow-hidden"
-    >
-      <div className="absolute top-0 left-0 w-1 h-full gold-gradient opacity-0 group-hover:opacity-100 transition-opacity" />
-      <h3 className="text-gray-400 text-sm font-medium mb-2">{title}</h3>
-      <div className="flex items-baseline gap-2">
-        <span className="text-3xl font-bold text-white">
-          {convertedPrice ? convertedPrice.toLocaleString('ar-EG', { minimumFractionDigits: 2 }) : '...'}
-        </span>
-        <span className="text-gold text-sm font-semibold">{currency} / {unit}</span>
-      </div>
-      <div className="mt-4 flex items-center gap-2 text-emerald-400 text-sm">
-        <TrendingUp className="w-4 h-4" />
-        <span>+0.2% اليوم</span>
-      </div>
-    </motion.div>
-  );
-};
-
-const NewsCard = ({ item }: any) => (
-  <div className="bg-zinc-900/40 border border-white/5 p-5 rounded-xl hover:bg-zinc-900/60 transition-all group">
-    <div className="flex justify-between items-start mb-3">
-      <span className="text-xs font-bold text-gold uppercase tracking-wider bg-gold/10 px-2 py-1 rounded">
-        {item.source}
-      </span>
-      <span className="text-xs text-gray-500">
-        {format(new Date(item.pubDate), 'dd MMMM yyyy', { locale: ar })}
-      </span>
-    </div>
-    <h4 className="text-lg font-bold text-white mb-2 group-hover:text-gold transition-colors leading-tight">
-      {item.title}
-    </h4>
-    <p className="text-gray-400 text-sm line-clamp-2 mb-4 leading-relaxed">
-      {item.contentSnippet}
-    </p>
-    <a 
-      href={item.link} 
-      target="_blank" 
-      rel="noopener noreferrer"
-      className="text-gold text-sm font-semibold flex items-center gap-1 hover:gap-2 transition-all"
-    >
-      اقرأ المزيد <ChevronLeft className="w-4 h-4" />
-    </a>
-  </div>
-);
-
-// --- Pages ---
-
-const GoldCalculator = ({ latestPrice, selectedCurrency, exchangeRate }: any) => {
-  const [weight, setWeight] = useState(1);
-  const [karat, setKarat] = useState('24k');
-
-  const getPricePerGram = () => {
-    if (!latestPrice) return 0;
-    switch (karat) {
-      case '24k': return latestPrice.price_24k;
-      case '22k': return latestPrice.price_22k;
-      case '21k': return latestPrice.price_21k;
-      case '18k': return latestPrice.price_18k;
-      default: return 0;
-    }
-  };
-
-  const totalPrice = getPricePerGram() * weight * exchangeRate;
-
-  return (
-    <div className="bg-zinc-900/50 border border-white/5 p-8 rounded-3xl space-y-6">
-      <h3 className="text-2xl font-bold flex items-center gap-2">
-        <Calculator className="text-gold" />
-        حاسبة الذهب
-      </h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="space-y-2">
-          <label className="text-sm text-gray-400">الوزن (جرام)</label>
-          <input
-            type="number"
-            value={weight}
-            onChange={(e) => setWeight(Number(e.target.value))}
-            className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 focus:border-gold outline-none text-white"
-            min="0"
-          />
-        </div>
-        <div className="space-y-2">
-          <label className="text-sm text-gray-400">العيار</label>
-          <select
-            value={karat}
-            onChange={(e) => setKarat(e.target.value)}
-            className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 focus:border-gold outline-none text-white"
-          >
-            <option value="24k">عيار 24</option>
-            <option value="22k">عيار 22</option>
-            <option value="21k">عيار 21</option>
-            <option value="18k">عيار 18</option>
-          </select>
-        </div>
-      </div>
-      <div className="pt-6 border-t border-white/5 flex flex-col items-center justify-center space-y-2">
-        <span className="text-gray-400 text-sm">إجمالي القيمة التقريبية</span>
-        <div className="text-4xl font-bold gold-text">
-          {totalPrice.toLocaleString('ar-EG', { minimumFractionDigits: 2 })} {selectedCurrency}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const HomePage = ({ latestPrice, news, settings, selectedCurrency, exchangeRate, onRefresh, refreshing }: any) => {
-  return (
-    <div className="space-y-12 py-8">
-      <section className="text-center space-y-4 relative">
-        <motion.h1 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-4xl md:text-6xl font-extrabold tracking-tight"
-        >
-          أسعار الذهب <span className="gold-text">مباشرة</span>
-        </motion.h1>
-        <p className="text-gray-400 max-w-2xl mx-auto text-lg">
-          تغطية شاملة لأسعار الذهب العالمية والمحلية، محدثة لحظة بلحظة لمساعدتك في اتخاذ أفضل قرارات الاستثمار.
-        </p>
-      </section>
-
-      {/* Live Prices Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <PriceCard title="ذهب عيار 24" price={latestPrice?.price_24k} currency={selectedCurrency} exchangeRate={exchangeRate} />
-        <PriceCard title="ذهب عيار 22" price={latestPrice?.price_22k} currency={selectedCurrency} exchangeRate={exchangeRate} />
-        <PriceCard title="ذهب عيار 21" price={latestPrice?.price_21k} currency={selectedCurrency} exchangeRate={exchangeRate} />
-        <PriceCard title="ذهب عيار 18" price={latestPrice?.price_18k} currency={selectedCurrency} exchangeRate={exchangeRate} />
+        ))}
       </div>
 
+      {/* Calculator & News */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2">
-          <GoldCalculator latestPrice={latestPrice} selectedCurrency={selectedCurrency} exchangeRate={exchangeRate} />
+        <div className="lg:col-span-1">
+          <GoldCalculator prices={prices} currency={currency} amount={calcAmount} setAmount={setCalcAmount} type={calcType} setType={setCalcType} />
         </div>
-        <div className="bg-zinc-900/30 border border-dashed border-white/10 rounded-3xl flex items-center justify-center p-8 text-gray-500 text-center">
-          <div dangerouslySetInnerHTML={{ __html: settings.ads_sidebar }} />
-          {!settings.ads_sidebar && "مساحة إعلانية"}
-        </div>
-      </div>
-
-      {/* Ads Placeholder */}
-      {settings.ads_header && (
-        <div className="bg-zinc-900/30 border border-dashed border-white/10 p-4 rounded-xl text-center text-gray-500 text-sm">
-          {settings.ads_header}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-        {/* Main Content: News */}
-        <div className="lg:col-span-2 space-y-8">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold flex items-center gap-3">
-              <Newspaper className="text-gold" />
+        <div className="lg:col-span-2 space-y-6">
+          <div className="flex justify-between items-center">
+            <h3 className="text-xl font-bold flex items-center gap-3">
+              <Newspaper className="text-primary" />
               أحدث الأخبار الاقتصادية
-            </h2>
+            </h3>
+            <Link to="/news" className="text-xs font-bold text-primary hover:underline">عرض جميع الأخبار</Link>
           </div>
-          <div className="grid gap-6">
-            {news.slice(0, 6).map((item) => (
-              <NewsCard key={item.id} item={item} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {news.slice(0, 4).map((item: any) => (
+              <a key={item.id} href={item.link} target="_blank" rel="noopener noreferrer" className="bg-card p-5 rounded-2xl border border-gold/10 card-shadow hover:border-primary/30 transition-all group">
+                <div className="flex justify-between items-start mb-3">
+                  <span className="text-[10px] font-bold text-primary uppercase bg-primary/10 px-2 py-1 rounded">{item.source}</span>
+                  <span className="text-[10px] text-gray-500">{new Date(item.pubDate).toLocaleDateString()}</span>
+                </div>
+                <h4 className="text-white font-bold mb-2 line-clamp-2 group-hover:text-primary transition-colors">{item.title}</h4>
+                <p className="text-gray-500 text-xs line-clamp-2 leading-relaxed">{item.contentSnippet}</p>
+              </a>
             ))}
           </div>
         </div>
+      </div>
 
-        {/* Sidebar */}
-        <div className="space-y-8">
-          <div className="bg-gold/5 border border-gold/10 p-6 rounded-2xl">
-            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <Bell className="text-gold" />
-              اشترك في التنبيهات
-            </h3>
-            <p className="text-gray-400 text-sm mb-6 leading-relaxed">
-              احصل على إشعارات فورية عند تغير أسعار الذهب بشكل ملحوظ أو عند صدور أخبار عاجلة.
-            </p>
-            <button 
-              onClick={async () => {
-                const OneSignal = (window as any).OneSignal;
-                if (OneSignal) {
-                  try {
-                    if (OneSignal.Notifications) {
-                      await OneSignal.Notifications.requestPermission();
-                    } else if (OneSignal.showNativePrompt) {
-                      OneSignal.showNativePrompt();
-                    }
-                  } catch (err) {
-                    console.error('OneSignal error:', err);
-                  }
-                } else {
-                  alert('جاري تحميل نظام التنبيهات... يرجى المحاولة مرة أخرى');
-                }
-              }}
-              className="w-full py-3 gold-gradient text-black font-bold rounded-xl shadow-lg shadow-gold/20 hover:scale-[1.02] transition-transform"
-            >
-              تفعيل الإشعارات
+      {/* Subscribe to Alerts */}
+      <div className="bg-gradient-to-r from-gold/20 to-primary/10 rounded-3xl p-8 border border-gold/20 relative overflow-hidden mt-12">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full -mr-32 -mt-32 blur-3xl" />
+        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
+          <div className="text-center md:text-right">
+            <h3 className="text-2xl font-bold mb-2">اشترك في تنبيهات الأسعار</h3>
+            <p className="text-gray-400 text-sm">كن أول من يعلم عند تغير أسعار الذهب بشكل ملحوظ في السوق العالمي.</p>
+          </div>
+          <div className="flex w-full md:w-auto gap-2">
+            <input 
+              type="email" 
+              placeholder="بريدك الإلكتروني" 
+              className="flex-1 md:w-64 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition-all text-white"
+            />
+            <button className="bg-primary text-black px-6 py-3 rounded-xl font-bold text-sm hover:bg-primary/80 transition-all shadow-lg shadow-primary/20 whitespace-nowrap">
+              اشترك الآن
             </button>
           </div>
-
-          {settings.ad_link && (
-            <a 
-              href={settings.ad_link}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block bg-emerald-500/10 border border-emerald-500/20 p-6 rounded-2xl hover:bg-emerald-500/20 transition-all group"
-            >
-              <h3 className="text-lg font-bold text-emerald-400 mb-2 flex items-center gap-2">
-                <TrendingUp className="w-5 h-5" />
-                فرص استثمارية
-              </h3>
-              <p className="text-gray-400 text-xs leading-relaxed group-hover:text-gray-300 transition-colors">
-                اكتشف أفضل الفرص الاستثمارية والعروض الحصرية المتاحة حالياً في سوق الذهب والعملات.
-              </p>
-            </a>
-          )}
-
-          <div className="bg-zinc-900/50 border border-white/5 p-6 rounded-2xl">
-            <h3 className="text-lg font-bold mb-4">أهمية متابعة السعر</h3>
-            <ul className="space-y-4 text-sm text-gray-400">
-              <li className="flex gap-3">
-                <div className="w-1.5 h-1.5 rounded-full bg-gold mt-1.5 shrink-0" />
-                تحديد الوقت الأمثل للشراء أو البيع.
-              </li>
-              <li className="flex gap-3">
-                <div className="w-1.5 h-1.5 rounded-full bg-gold mt-1.5 shrink-0" />
-                متابعة تأثير التضخم على قيمة مدخراتك.
-              </li>
-              <li className="flex gap-3">
-                <div className="w-1.5 h-1.5 rounded-full bg-gold mt-1.5 shrink-0" />
-                تحليل الاتجاهات السوقية طويلة الأمد.
-              </li>
-            </ul>
-          </div>
         </div>
       </div>
     </div>
   );
 };
 
-const TradingChart = ({ data, selectedCurrency, exchangeRate, timeframe }: any) => {
-  const getSlicedData = () => {
-    const reversed = [...data].reverse();
-    switch (timeframe) {
-      case '1H': return reversed.slice(-12);
-      case '4H': return reversed.slice(-48);
-      case '1D': return reversed;
-      default: return reversed;
+const ChartsPage = ({ chartData, currency }: any) => {
+  const [timeRange, setTimeRange] = useState('D1');
+  const [isChanging, setIsChanging] = useState(false);
+  const [selectedPoint, setSelectedPoint] = useState<any>(null);
+
+  const handleRangeChange = (range: string) => {
+    setIsChanging(true);
+    setTimeRange(range);
+    setTimeout(() => setIsChanging(false), 800);
+  };
+
+  const formatXAxis = (tickItem: any) => {
+    const date = new Date(tickItem);
+    if (timeRange === 'H1' || timeRange === 'H2' || timeRange === 'D1') {
+      return date.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
     }
+    return date.toLocaleDateString('ar-SA', { month: 'short', day: 'numeric' });
   };
 
-  const slicedData = getSlicedData();
-  const labels = slicedData.map((h: any) => {
-    const date = h.timestamp ? new Date(h.timestamp) : new Date();
-    return format(isNaN(date.getTime()) ? new Date() : date, timeframe === '1H' || timeframe === '4H' ? 'HH:mm' : 'dd/MM HH:mm', { locale: ar });
-  });
-
-  const prices = slicedData.map((h: any) => (h.price_24k || 0) * exchangeRate);
-  const currentPrice = prices[prices.length - 1] || 0;
-
-  const chartData = {
-    labels,
-    datasets: [
-      {
-        fill: true,
-        label: 'Price',
-        data: prices,
-        borderColor: '#D4AF37',
-        borderWidth: 2,
-        backgroundColor: (context: any) => {
-          const ctx = context.chart.ctx;
-          const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-          gradient.addColorStop(0, 'rgba(212, 175, 55, 0.3)');
-          gradient.addColorStop(1, 'rgba(212, 175, 55, 0)');
-          return gradient;
-        },
-        tension: 0.4,
-        pointRadius: 0,
-        pointHoverRadius: 6,
-        pointHoverBackgroundColor: '#D4AF37',
-        pointHoverBorderColor: '#fff',
-        pointHoverBorderWidth: 2,
-      },
-    ],
-  };
-
-  const options: any = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: false,
-      },
-      tooltip: {
-        enabled: true,
-        backgroundColor: '#18181b',
-        titleColor: '#9ca3af',
-        bodyColor: '#D4AF37',
-        bodyFont: {
-          weight: 'bold',
-          size: 16,
-        },
-        borderColor: 'rgba(212, 175, 55, 0.3)',
-        borderWidth: 1,
-        padding: 12,
-        displayColors: false,
-        callbacks: {
-          label: (context: any) => {
-            return `${context.parsed.y.toLocaleString('ar-EG', { minimumFractionDigits: 2 })} ${selectedCurrency}`;
-          },
-        },
-      },
-    },
-    scales: {
-      x: {
-        grid: {
-          display: false,
-        },
-        ticks: {
-          color: '#444',
-          font: {
-            size: 10,
-            family: 'monospace',
-          },
-          maxRotation: 0,
-          autoSkip: true,
-          maxTicksLimit: 8,
-        },
-      },
-      y: {
-        position: 'right',
-        grid: {
-          color: 'rgba(255, 255, 255, 0.03)',
-        },
-        ticks: {
-          color: '#444',
-          font: {
-            size: 10,
-            family: 'monospace',
-          },
-          callback: (value: any) => value.toLocaleString(),
-        },
-      },
-    },
-    interaction: {
-      intersect: false,
-      mode: 'index',
-    },
-  };
+  // Filter data based on range (simulated)
+  const filteredData = React.useMemo(() => {
+    if (timeRange === 'H1') return chartData.slice(-12);
+    if (timeRange === 'H2') return chartData.slice(-24);
+    if (timeRange === 'D1') return chartData.slice(-48);
+    return chartData;
+  }, [chartData, timeRange]);
 
   return (
-    <div className="h-[500px] w-full bg-[#0a0a0a] rounded-3xl border border-white/5 overflow-hidden relative group">
-      <div className="absolute top-0 left-0 right-0 z-10 p-4 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent">
-        <div className="flex items-center gap-4">
-          <div className="flex flex-col">
-            <span className="text-xs text-gray-500 font-mono uppercase tracking-widest">XAU / {selectedCurrency}</span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-white font-mono">
-                {currentPrice.toLocaleString('ar-EG', { minimumFractionDigits: 2 })}
-              </span>
-              <span className="text-emerald-400 text-xs font-mono">+1.24%</span>
-            </div>
-          </div>
-          <div className="h-8 w-px bg-white/10 mx-2" />
-          <div className="hidden md:flex items-center gap-4 text-[10px] font-mono text-gray-400">
-            <div>O: <span className="text-white">2,345.20</span></div>
-            <div>H: <span className="text-emerald-400">2,360.45</span></div>
-            <div>L: <span className="text-rose-400">2,340.10</span></div>
-            <div>C: <span className="text-white">2,355.80</span></div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-[10px] text-emerald-500 font-mono uppercase tracking-tighter">Live Market</span>
-        </div>
-      </div>
-
-      <div className="w-full h-full pt-20">
-        <Line data={chartData} options={options} />
-      </div>
-    </div>
-  );
-};
-
-const ChartsPage = ({ history, selectedCurrency, exchangeRate }: any) => {
-  const [timeframe, setTimeframe] = useState('1H');
-
-  return (
-    <div className="py-8 space-y-8">
+    <div className="space-y-8">
+      <Helmet>
+        <title>الرسوم البيانية | أسعار الذهب المباشرة</title>
+        <meta name="description" content="تحليل تقني ورسوم بيانية تفاعلية لأسعار الذهب العالمية والمحلية." />
+      </Helmet>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold mb-2">منصة التداول المباشرة</h1>
-          <p className="text-gray-400">تحليل تقني متقدم لحركة أسعار الذهب العالمية والمحلية.</p>
-        </div>
-        <div className="flex bg-zinc-900/80 p-1 rounded-xl border border-white/5">
-          {['1H', '4H', '1D', '1W', '1M'].map(p => (
-            <button 
-              key={p}
-              onClick={() => setTimeframe(p)}
-              className={`px-4 py-1.5 rounded-lg text-xs font-mono transition-all ${p === timeframe ? 'bg-gold text-black font-bold' : 'text-gray-500 hover:text-white'}`}
+        <h2 className="text-3xl font-bold gold-text-gradient">الرسوم البيانية والتحليلات</h2>
+        <div className="flex bg-[#161a1e] p-1 rounded-lg border border-white/5">
+          {['H1', 'H2', 'D1', 'M1', 'Y1'].map((range) => (
+            <button
+              key={range}
+              onClick={() => handleRangeChange(range)}
+              className={`px-3 py-1 rounded text-[11px] font-bold transition-all ${
+                timeRange === range ? 'bg-[#2b3139] text-primary' : 'text-gray-500 hover:text-white'
+              }`}
             >
-              {p}
+              {range}
             </button>
           ))}
         </div>
       </div>
-
-      <TradingChart data={history} selectedCurrency={selectedCurrency} exchangeRate={exchangeRate} timeframe={timeframe} />
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-zinc-900/40 border border-white/5 p-6 rounded-2xl">
-          <div className="text-gray-500 text-xs font-mono mb-1 uppercase">RSI (14)</div>
-          <div className="text-2xl font-bold text-white font-mono">58.42</div>
-          <div className="w-full h-1 bg-white/5 rounded-full mt-3 overflow-hidden">
-            <div className="h-full bg-gold w-[58%]" />
+      <div className="bg-[#0b0e11] rounded-xl p-4 border border-white/5 card-shadow relative overflow-hidden group">
+        <div className="flex justify-between items-center mb-4 text-[10px] font-mono text-gray-500">
+          <div className="flex gap-4">
+            <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-primary" /> GOLD/USD</span>
+            <span>MA(5): <span className="text-yellow-500">2,154.20</span></span>
+            <span>MA(10): <span className="text-purple-500">2,148.15</span></span>
           </div>
-          <div className="flex justify-between mt-1 text-[10px] text-gray-600 font-mono">
-            <span>OVERSOLD</span>
-            <span>OVERBOUGHT</span>
+          <div className="flex gap-2">
+            <span className="text-up">H: 2,165.40</span>
+            <span className="text-down">L: 2,140.10</span>
           </div>
         </div>
-        <div className="bg-zinc-900/40 border border-white/5 p-6 rounded-2xl">
-          <div className="text-gray-500 text-xs font-mono mb-1 uppercase">Volatility (ATR)</div>
-          <div className="text-2xl font-bold text-emerald-400 font-mono">Low</div>
-          <p className="text-[10px] text-gray-500 mt-2">السوق مستقر حالياً مع تقلبات منخفضة.</p>
+
+        <AnimatePresence>
+          {isChanging && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-[#0b0e11]/80 backdrop-blur-sm z-20 flex items-center justify-center"
+            >
+              <RefreshCw className="w-8 h-8 text-primary animate-spin" />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className="h-[500px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart 
+              data={filteredData}
+              onClick={(data: any) => {
+                if (data && data.activePayload && data.activePayload.length > 0) {
+                  setSelectedPoint(data.activePayload[0].payload);
+                }
+              }}
+              margin={{ top: 10, right: 0, left: -20, bottom: 0 }}
+            >
+              <defs>
+                <linearGradient id="colorChart" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#D4AF37" stopOpacity={0.2}/>
+                  <stop offset="95%" stopColor="#D4AF37" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="0" stroke="#1e2329" vertical={true} horizontal={true} />
+              <XAxis 
+                dataKey="timestamp" 
+                tickFormatter={formatXAxis}
+                stroke="#474d57" 
+                fontSize={10} 
+                tickLine={false} 
+                axisLine={false} 
+                dy={10}
+                minTickGap={30}
+              />
+              <YAxis 
+                orientation="right"
+                stroke="#474d57" 
+                fontSize={10} 
+                tickLine={false} 
+                axisLine={false} 
+                domain={['auto', 'auto']} 
+                tickFormatter={(val) => val.toLocaleString()}
+              />
+              <Tooltip 
+                content={({ active, payload }: any) => {
+                  if (active && payload && payload.length) {
+                    const date = new Date(payload[0].payload.timestamp);
+                    return (
+                      <div className="bg-[#1e2329] border border-[#474d57] p-3 rounded shadow-2xl text-right text-[11px]">
+                        <p className="text-white font-bold mb-1">السعر: <span className="text-primary">{payload[0].value.toLocaleString(undefined, { minimumFractionDigits: 2 })} {currency}</span></p>
+                        <p className="text-gray-400">التاريخ: {date.toLocaleDateString('ar-SA')}</p>
+                        <p className="text-gray-400">الوقت: {date.toLocaleTimeString('ar-SA')}</p>
+                      </div>
+                    );
+                  }
+                  return null;
+                }}
+                cursor={{ stroke: '#474d57', strokeWidth: 1 }}
+              />
+              <Area 
+                type="monotone" 
+                dataKey="value" 
+                stroke="#D4AF37" 
+                strokeWidth={2} 
+                fillOpacity={1} 
+                fill="url(#colorChart)" 
+                animationDuration={1000}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
-        <div className="bg-zinc-900/40 border border-white/5 p-6 rounded-2xl">
-          <div className="text-gray-500 text-xs font-mono mb-1 uppercase">Market Sentiment</div>
-          <div className="text-2xl font-bold text-gold font-mono">Bullish</div>
-          <p className="text-[10px] text-gray-500 mt-2">توقعات إيجابية باستمرار ارتفاع الأسعار.</p>
+        
+        {selectedPoint && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-6 p-4 bg-white/5 rounded-2xl border border-gold/20 flex justify-between items-center"
+          >
+            <div className="flex flex-col">
+              <span className="text-[10px] text-gray-500 font-bold uppercase">السعر المختار</span>
+              <span className="text-xl font-bold text-primary">{selectedPoint.value.toLocaleString()} {currency}</span>
+            </div>
+            <div className="text-right">
+              <span className="text-[10px] text-gray-500 font-bold uppercase">التاريخ والوقت</span>
+              <p className="text-sm font-bold text-white">
+                {new Date(selectedPoint.timestamp).toLocaleDateString('ar-SA', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </p>
+              <p className="text-xs text-gray-400">
+                {new Date(selectedPoint.timestamp).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}
+              </p>
+            </div>
+          </motion.div>
+        )}
+
+        <div className="mt-6 flex justify-between items-center text-[10px] text-gray-500 font-bold uppercase tracking-widest">
+          <div className="flex items-center gap-4">
+            <span>مباشر من البورصة العالمية</span>
+            <span className="text-primary/40">|</span>
+            <span>النطاق: {timeRange}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-up animate-pulse" />
+            <span>محدث الآن</span>
+          </div>
         </div>
       </div>
     </div>
   );
 };
 
-const AdminPanel = ({ settings, onUpdateSettings }: any) => {
-  const [password, setPassword] = useState('');
-  const [token, setToken] = useState(localStorage.getItem('admin_token'));
-  const [formData, setFormData] = useState(settings);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const [notifTitle, setNotifTitle] = useState('');
-  const [notifMsg, setNotifMsg] = useState('');
-  const [annTitle, setAnnTitle] = useState('');
-  const [annContent, setAnnContent] = useState('');
-  const [newAdminPassword, setNewAdminPassword] = useState('');
-  const [stats, setStats] = useState<any>(null);
+const NewsPage = ({ news }: any) => {
+  const [newsList, setNewsList] = useState(news);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   useEffect(() => {
-    if (token) {
-      const fetchStats = async () => {
-        try {
-          const res = await axios.get('/api/admin/stats', {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          setStats(res.data);
-        } catch (err) {
-          console.error("Stats error:", err);
-        }
-      };
-      fetchStats();
-    }
-  }, [token]);
+    setNewsList(news);
+  }, [news]);
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
+  const handleLike = async (id: number) => {
     try {
-      const res = await axios.post('/api/admin/login', { password });
-      setToken(res.data.token);
-      localStorage.setItem('admin_token', res.data.token);
-      setError('');
+      await axios.post(`/api/news/${id}/like`);
+      setNewsList(newsList.map((item: any) => 
+        item.id === id ? { ...item, likes: (item.likes || 0) + 1 } : item
+      ));
     } catch (err) {
-      setError('كلمة المرور غير صحيحة');
+      console.error("Like error:", err);
     }
   };
 
-  const handleSave = async () => {
-    setLoading(true);
+  const handleView = async (id: number) => {
     try {
-      await axios.post('/api/admin/settings', formData, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      onUpdateSettings(formData);
-      alert('تم حفظ الإعدادات بنجاح');
+      await axios.post(`/api/news/${id}/view`);
+      setNewsList(newsList.map((item: any) => 
+        item.id === id ? { ...item, views: (item.views || 0) + 1 } : item
+      ));
     } catch (err) {
-      alert('حدث خطأ أثناء الحفظ');
+      console.error("View error:", err);
     }
-    setLoading(false);
   };
 
-  const handleSendNotification = async () => {
-    if (!notifTitle || !notifMsg) return alert('يرجى ملء جميع الحقول');
-    setLoading(true);
-    try {
-      await axios.post('/api/admin/notifications', { title: notifTitle, message: notifMsg }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      alert('تم إرسال التنبيه بنجاح');
-      setNotifTitle('');
-      setNotifMsg('');
-    } catch (err) {
-      alert('حدث خطأ أثناء الإرسال');
-    }
-    setLoading(false);
-  };
-
-  const handleAddAnnouncement = async () => {
-    if (!annTitle || !annContent) return alert('يرجى ملء جميع الحقول');
-    setLoading(true);
-    try {
-      await axios.post('/api/admin/announcement', { title: annTitle, content: annContent }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      alert('تم نشر الإعلان بنجاح');
-      setAnnTitle('');
-      setAnnContent('');
-    } catch (err) {
-      alert('حدث خطأ أثناء النشر');
-    }
-    setLoading(false);
-  };
-
-  const handleChangePassword = async () => {
-    if (!newAdminPassword || newAdminPassword.length < 6) return alert('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
-    setLoading(true);
-    try {
-      await axios.post('/api/admin/change-password', { newPassword: newAdminPassword }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      alert('تم تغيير كلمة المرور بنجاح');
-      setNewAdminPassword('');
-    } catch (err) {
-      alert('حدث خطأ أثناء تغيير كلمة المرور');
-    }
-    setLoading(false);
-  };
-
-  if (!token) {
-    return (
-      <div className="max-w-md mx-auto py-20">
-        <div className="bg-zinc-900 p-8 rounded-3xl border border-white/5 shadow-2xl">
-          <div className="w-16 h-16 gold-gradient rounded-2xl mx-auto mb-6 flex items-center justify-center">
-            <Settings className="text-black w-8 h-8" />
-          </div>
-          <h2 className="text-2xl font-bold text-center mb-8">تسجيل دخول المسؤول</h2>
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">كلمة المرور</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 focus:border-gold outline-none transition-colors"
-                placeholder="••••••••"
-              />
+  return (
+    <div className="space-y-8">
+      <Helmet>
+        <title>أخبار الذهب | مراقب الذهب</title>
+        <meta name="description" content="تغطية شاملة لأحدث أخبار الذهب والأسواق المالية العالمية." />
+      </Helmet>
+      <h2 className="text-3xl font-bold gold-text-gradient">أخبار الذهب والأسواق</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {newsList.map((item: any) => (
+          <div key={item.id} className="bg-card p-6 rounded-3xl border border-gold/10 card-shadow hover:border-primary/30 transition-all group flex flex-col">
+            <div className="flex justify-between items-start mb-4">
+              <span className="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full">{item.source}</span>
+              <span className="text-xs text-gray-500">{new Date(item.pubDate).toLocaleDateString()}</span>
             </div>
-            {error && <p className="text-rose-400 text-sm">{error}</p>}
-            <button className="w-full py-3 gold-gradient text-black font-bold rounded-xl">
-              دخول
-            </button>
-          </form>
+            <h4 className="text-lg font-bold mb-3 group-hover:text-primary transition-colors">{item.title}</h4>
+            <div className={`text-gray-500 text-sm leading-relaxed mb-4 ${expandedId === item.id ? '' : 'line-clamp-3'}`}>
+              {item.contentSnippet}
+            </div>
+            
+            <div className="mt-auto space-y-4">
+              <div className="flex items-center justify-between border-t border-white/5 pt-4">
+                <div className="flex items-center gap-4">
+                  <button 
+                    onClick={() => handleLike(item.id)}
+                    className="flex items-center gap-1 text-gray-400 hover:text-red-500 transition-colors"
+                  >
+                    <TrendingUp size={14} className={item.likes > 0 ? "text-red-500" : ""} />
+                    <span className="text-xs font-bold">{item.likes || 0}</span>
+                  </button>
+                  <div className="flex items-center gap-1 text-gray-400">
+                    <Eye size={14} />
+                    <span className="text-xs font-bold">{item.views || 0}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {item.contentSnippet && item.contentSnippet.length > 150 && (
+                    <button 
+                      onClick={() => {
+                        if (expandedId !== item.id) handleView(item.id);
+                        setExpandedId(expandedId === item.id ? null : item.id);
+                      }}
+                      className="text-primary text-xs font-bold hover:underline"
+                    >
+                      {expandedId === item.id ? 'إغلاق' : 'اقرأ المزيد'}
+                    </button>
+                  )}
+                  <a 
+                    href={item.link} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    onClick={() => handleView(item.id)}
+                    className="p-1.5 bg-white/5 rounded-lg text-gray-400 hover:text-primary transition-colors"
+                    title="المصدر الأصلي"
+                  >
+                    <Globe size={14} />
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const TipsPage = () => (
+  <div className="space-y-8">
+    <Helmet>
+      <title>نصائح الاستثمار | مراقب الذهب</title>
+      <meta name="description" content="دليلك الشامل للاستثمار في الذهب وكيفية الحفاظ على قيمة مدخراتك." />
+    </Helmet>
+    <h2 className="text-3xl font-bold gold-text-gradient">نصائح الاستثمار في الذهب</h2>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      {[
+        { title: 'لماذا الذهب؟', content: 'يعتبر الذهب ملاذاً آمناً في أوقات الأزمات الاقتصادية والتضخم.', icon: Lightbulb },
+        { title: 'أفضل وقت للشراء', content: 'الشراء التدريجي (متوسط التكلفة) هو أفضل استراتيجية للمستثمر طويل الأمد.', icon: Clock },
+        { title: 'السبائك أم المشغولات؟', content: 'السبائك والعملات الذهبية أفضل للاستثمار لقلة المصنعية مقارنة بالمشغولات.', icon: Coins },
+        { title: 'التنويع', content: 'لا تضع كل مدخراتك في الذهب؛ اجعل الذهب جزءاً من محفظة استثمارية متنوعة.', icon: Globe },
+      ].map((tip, idx) => (
+        <div key={idx} className="bg-card p-8 rounded-3xl border border-gold/10 card-shadow flex gap-6">
+          <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center text-primary shrink-0">
+            <tip.icon size={28} />
+          </div>
+          <div>
+            <h3 className="text-xl font-bold mb-2">{tip.title}</h3>
+            <p className="text-gray-500 leading-relaxed">{tip.content}</p>
+          </div>
         </div>
+      ))}
+    </div>
+  </div>
+);
+
+const AboutPage = () => (
+  <div className="space-y-8 max-w-3xl mx-auto">
+    <Helmet>
+      <title>عن الموقع | مراقب الذهب</title>
+      <meta name="description" content="تعرف على منصة مراقب الذهب وأهدافنا في تقديم أدق البيانات المالية." />
+    </Helmet>
+    <div className="bg-card p-12 rounded-3xl border border-gold/10 card-shadow text-center space-y-6">
+      <div className="w-20 h-20 gold-gradient rounded-3xl flex items-center justify-center text-black mx-auto shadow-xl">
+        <Coins size={40} />
+      </div>
+      <h2 className="text-3xl font-bold gold-text-gradient">عن مراقب الذهب</h2>
+      <p className="text-gray-400 leading-relaxed text-lg">
+        منصة "مراقب الذهب" هي وجهتك الأولى لمتابعة أسعار الذهب العالمية والمحلية لحظة بلحظة. نهدف إلى تقديم بيانات دقيقة وموثوقة للمستثمرين والمهتمين بسوق الذهب، مع توفير أدوات تحليلية وأخبار اقتصادية شاملة.
+      </p>
+      <div className="flex flex-col items-center gap-2 text-primary">
+        <Mail size={20} />
+        <span className="text-sm font-bold">qydalrfyd@gmail.com</span>
+      </div>
+      <div className="pt-8 grid grid-cols-3 gap-4">
+        <div className="p-4 bg-white/5 rounded-2xl">
+          <h4 className="font-bold text-primary text-xl">24/7</h4>
+          <p className="text-[10px] text-gray-500 uppercase font-bold">تحديث مباشر</p>
+        </div>
+        <div className="p-4 bg-white/5 rounded-2xl">
+          <h4 className="font-bold text-primary text-xl">100%</h4>
+          <p className="text-[10px] text-gray-500 uppercase font-bold">دقة البيانات</p>
+        </div>
+        <div className="p-4 bg-white/5 rounded-2xl">
+          <h4 className="font-bold text-primary text-xl">Free</h4>
+          <p className="text-[10px] text-gray-500 uppercase font-bold">خدمة مجانية</p>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const GoldCalculator = ({ prices, currency, amount, setAmount, type, setType }: any) => {
+  const selectedPrice = prices.find((p: any) => p.id === type)?.price || 0;
+  const total = (Number(amount) || 0) * selectedPrice;
+
+  return (
+    <div className="bg-card rounded-2xl p-6 border border-gold/10 card-shadow">
+      <h3 className="font-bold mb-4 flex items-center gap-2">
+        <Calculator size={18} className="text-primary" />
+        حاسبة الذهب
+      </h3>
+      <div className="space-y-4">
+        <div>
+          <label className="text-[10px] text-gray-500 uppercase font-bold mb-1 block">الوزن (جرام)</label>
+          <input 
+            type="text" 
+            inputMode="decimal"
+            value={amount} 
+            onFocus={(e) => e.target.select()}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                setAmount(val);
+              }
+            }} 
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary transition-colors text-white" 
+            placeholder="أدخل الوزن..."
+          />
+        </div>
+        <div>
+          <label className="text-[10px] text-gray-500 uppercase font-bold mb-1 block">العيار</label>
+          <select value={type} onChange={(e) => setType(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary transition-colors text-white">
+            {prices.map((p: any) => <option key={p.id} value={p.id} className="bg-card">{p.type}</option>)}
+          </select>
+        </div>
+        <div className="pt-4 border-t border-white/10">
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-gray-500">القيمة التقديرية</span>
+            <span className="text-lg font-bold text-primary">{total.toLocaleString(undefined, { minimumFractionDigits: 2 })} {currency}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const BottomNav = ({ onRefresh }: { onRefresh: () => void }) => {
+  const location = useLocation();
+  const navItems = [
+    { id: '/', label: 'الرئيسية', icon: Layout, path: '/' },
+    { id: '/charts', label: 'الرسوم', icon: BarChart2, path: '/charts' },
+    { id: '/news', label: 'الأخبار', icon: Newspaper, path: '/news' },
+    { id: '/tips', label: 'نصائح', icon: Lightbulb, path: '/tips' },
+  ];
+
+  return (
+    <div className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-gold/20 px-4 py-2 flex justify-between items-center z-[100] shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
+      {navItems.map((item) => (
+        <Link
+          key={item.id}
+          to={item.path}
+          className={`flex flex-col items-center gap-1 transition-all ${
+            location.pathname === item.path ? 'text-primary' : 'text-gray-500'
+          }`}
+        >
+          <item.icon size={20} />
+          <span className="text-[10px] font-bold">{item.label}</span>
+        </Link>
+      ))}
+      <button
+        onClick={() => {
+          onRefresh();
+          // Add a small visual feedback if needed, but the parent will handle data fetch
+        }}
+        className="flex flex-col items-center gap-1 text-gray-500 hover:text-primary transition-all active:scale-95"
+      >
+        <RefreshCw size={20} className="hover:rotate-180 transition-transform duration-500" />
+        <span className="text-[10px] font-bold">تحديث</span>
+      </button>
+    </div>
+  );
+};
+
+function AppContent() {
+  const [calcAmount, setCalcAmount] = useState<number | string>(1);
+  const [calcType, setCalcType] = useState('24k');
+  const [prices, setPrices] = useState<GoldPrice[]>([
+    { id: '24k', type: 'عيار 24', price: 0, change: 0, changePercent: 0 },
+    { id: '22k', type: 'عيار 22', price: 0, change: 0, changePercent: 0 },
+    { id: '21k', type: 'عيار 21', price: 0, change: 0, changePercent: 0 },
+    { id: '18k', type: 'عيار 18', price: 0, change: 0, changePercent: 0 },
+  ]);
+  const [chartData, setChartData] = useState<ChartData[]>([]);
+  const [news, setNews] = useState<NewsItem[]>([]);
+  const [currency, setCurrency] = useState(localStorage.getItem('selectedCurrency') || 'USD');
+  const [yemenRegion, setYemenRegion] = useState(localStorage.getItem('yemenRegion') || 'ADEN');
+  const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({ USD: 1 });
+  const [lastUpdate, setLastUpdate] = useState(new Date());
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('admin_token'));
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const location = useLocation();
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    setIsLoggedIn(!!localStorage.getItem('admin_token'));
+  }, [isAdmin]);
+
+  useEffect(() => {
+    localStorage.setItem('selectedCurrency', currency);
+  }, [currency]);
+
+  useEffect(() => {
+    localStorage.setItem('yemenRegion', yemenRegion);
+  }, [yemenRegion]);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
+
+  const fetchData = async () => {
+    const isInitial = prices[0].price === 0;
+    if (isInitial) setLoading(true);
+    try {
+      const [priceRes, historyRes, newsRes, ratesRes] = await Promise.all([
+        axios.get('/api/prices/latest'),
+        axios.get('/api/prices/history'),
+        axios.get('/api/news'),
+        axios.get('/api/exchange-rates')
+      ]);
+
+      const getRate = () => {
+        if (currency === 'YER') {
+          return ratesRes.data[`YER_${yemenRegion}`] || ratesRes.data['YER'] || 1650;
+        }
+        return ratesRes.data[currency] || 1;
+      };
+
+      const rate = getRate();
+      setExchangeRates(ratesRes.data);
+
+      const latest = priceRes.data || {};
+      const historyData = historyRes.data || [];
+      const previous = historyData.length > 1 ? historyData[1] : latest;
+      
+      const calculateChange = (current: number, prev: number) => {
+        const change = (current || 0) - (prev || 0);
+        const changePercent = (prev && prev !== 0) ? (change / prev) * 100 : 0;
+        return { change: change * rate, changePercent };
+      };
+
+      const formattedPrices: GoldPrice[] = [
+        { id: '24k', type: 'عيار 24', price: (latest.price_24k || 0) * rate, ...calculateChange(latest.price_24k, previous.price_24k) },
+        { id: '22k', type: 'عيار 22', price: (latest.price_22k || 0) * rate, ...calculateChange(latest.price_22k, previous.price_22k) },
+        { id: '21k', type: 'عيار 21', price: (latest.price_21k || 0) * rate, ...calculateChange(latest.price_21k, previous.price_21k) },
+        { id: '18k', type: 'عيار 18', price: (latest.price_18k || 0) * rate, ...calculateChange(latest.price_18k, previous.price_18k) },
+      ];
+      setPrices(formattedPrices);
+
+      const history = historyData.map((h: any) => ({
+        timestamp: h.timestamp,
+        value: h.price_24k * rate
+      })).reverse();
+      setChartData(history);
+
+      setNews(newsRes.data);
+      setLastUpdate(new Date());
+    } catch (err) {
+      console.error("Fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 60000); // 1 min
+    return () => clearInterval(interval);
+  }, [currency, yemenRegion]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-bg flex items-center justify-center">
+        <RefreshCw className="w-10 h-10 text-primary animate-spin" />
       </div>
     );
   }
 
-  return (
-    <div className="py-8 space-y-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">لوحة التحكم</h1>
-        <button 
-          onClick={() => {
-            setToken(null);
-            localStorage.removeItem('admin_token');
-          }}
-          className="flex items-center gap-2 text-gray-400 hover:text-rose-400 transition-colors"
-        >
-          <LogOut className="w-5 h-5" />
-          تسجيل الخروج
-        </button>
-      </div>
+  if (isAdmin) {
+    return <AdminDashboard onBack={() => setIsAdmin(false)} />;
+  }
 
-      {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-zinc-900/50 p-6 rounded-2xl border border-white/5 flex items-center gap-4">
-            <div className="w-12 h-12 bg-gold/10 rounded-xl flex items-center justify-center">
-              <Users className="text-gold w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-gray-400 text-sm">إجمالي الزيارات</p>
-              <p className="text-2xl font-bold">{stats.total.toLocaleString()}</p>
+  return (
+    <div className="min-h-screen flex flex-col bg-bg text-secondary" dir="rtl">
+      <header className="bg-card border-b border-gold/20 px-6 py-4 sticky top-0 z-50 shadow-2xl">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <Link to="/" className="w-10 h-10 gold-gradient rounded-lg flex items-center justify-center text-black shadow-lg shrink-0">
+              <Coins size={24} />
+            </Link>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl font-bold gold-text-gradient whitespace-nowrap">أسعار الذهب المباشرة</h1>
+                <div className="hidden sm:flex items-center gap-2 bg-white/5 px-2 py-1 rounded-lg border border-gold/20">
+                  <Globe size={12} className="text-primary" />
+                  <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="bg-transparent text-[10px] font-bold text-white focus:outline-none cursor-pointer">
+                    {Object.keys(exchangeRates).filter(c => !c.startsWith('YER_')).map(code => <option key={code} value={code} className="bg-card">{code}</option>)}
+                  </select>
+                </div>
+                <button 
+                  onClick={() => setIsAdmin(true)} 
+                  className="hidden sm:flex p-1.5 bg-white/5 rounded-lg border border-white/10 text-gray-400 hover:text-primary transition-all"
+                  title="دخول المشرف"
+                >
+                  <Settings size={18} />
+                </button>
+              </div>
+              <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold">
+                <span>{currentTime.toLocaleDateString('ar-SA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                <span className="text-primary">•</span>
+                <span>{currentTime.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+              </div>
             </div>
           </div>
-          <div className="bg-zinc-900/50 p-6 rounded-2xl border border-white/5 flex items-center gap-4">
-            <div className="w-12 h-12 bg-emerald-500/10 rounded-xl flex items-center justify-center">
-              <TrendingUp className="text-emerald-500 w-6 h-6" />
+
+          <div className="hidden md:flex items-center gap-6">
+            <nav className="flex gap-6 text-sm font-semibold">
+              <Link to="/" className={location.pathname === '/' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>الرئيسية</Link>
+              <Link to="/charts" className={location.pathname === '/charts' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>الرسوم البيانية</Link>
+              <Link to="/news" className={location.pathname === '/news' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>الأخبار</Link>
+              <Link to="/tips" className={location.pathname === '/tips' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>نصائح</Link>
+              <Link to="/about" className={location.pathname === '/about' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>عن الموقع</Link>
+            </nav>
+            <div className="h-4 w-[1px] bg-white/10" />
+            <button className="p-2 text-gray-400 hover:text-primary transition-colors">
+              <Bell size={20} />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 md:hidden">
+            <div className="flex items-center gap-2 bg-white/5 px-2 py-1 rounded-lg border border-gold/20">
+              <Globe size={12} className="text-primary" />
+              <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="bg-transparent text-[10px] font-bold text-white focus:outline-none cursor-pointer">
+                {Object.keys(exchangeRates).filter(c => !c.startsWith('YER_')).map(code => <option key={code} value={code} className="bg-card">{code}</option>)}
+              </select>
             </div>
-            <div>
-              <p className="text-gray-400 text-sm">زيارات اليوم</p>
-              <p className="text-2xl font-bold">{stats.today.toLocaleString()}</p>
+            <button 
+              onClick={() => setIsMenuOpen(!isMenuOpen)} 
+              className="p-2 text-gray-400 hover:text-primary transition-colors"
+            >
+              <Menu size={24} />
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile Menu */}
+        <AnimatePresence>
+          {isMenuOpen && (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="md:hidden overflow-hidden bg-card border-t border-white/5 mt-4"
+            >
+              <nav className="flex flex-col p-4 gap-4 text-sm font-bold">
+                <Link to="/" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">الرئيسية</Link>
+                <Link to="/charts" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">الرسوم البيانية</Link>
+                <Link to="/news" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">الأخبار</Link>
+                <Link to="/tips" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">نصائح</Link>
+                <Link to="/about" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">عن الموقع</Link>
+                <button 
+                  onClick={() => { setIsAdmin(true); setIsMenuOpen(false); }} 
+                  className="flex items-center gap-2 text-primary pt-4 border-t border-white/5"
+                >
+                  <Settings size={18} />
+                  <span>إعدادات المشرف</span>
+                </button>
+              </nav>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </header>
+
+      <TickerBar prices={prices} currency={currency} />
+
+      {currency === 'YER' && (
+        <div className="max-w-7xl mx-auto w-full px-6 pt-6 animate-in fade-in slide-in-from-top-4 duration-700">
+          <div className="bg-card border border-gold/20 p-4 rounded-2xl shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
+                <Globe size={20} />
+              </div>
+              <div>
+                <h3 className="font-bold text-white">تخصيص المنطقة (اليمن)</h3>
+                <p className="text-xs text-gray-500">اختر المنطقة لعرض الأسعار المحلية بدقة حسب السوق</p>
+              </div>
+            </div>
+            <div className="flex p-1 bg-white/5 rounded-xl border border-white/10 w-full sm:w-auto">
+              <button 
+                onClick={() => setYemenRegion('SANAA')}
+                className={`flex-1 sm:px-10 py-2.5 rounded-lg font-bold transition-all duration-300 ${yemenRegion === 'SANAA' ? 'gold-gradient text-black shadow-lg' : 'text-gray-400 hover:text-white'}`}
+              >
+                صنعاء
+              </button>
+              <button 
+                onClick={() => setYemenRegion('ADEN')}
+                className={`flex-1 sm:px-10 py-2.5 rounded-lg font-bold transition-all duration-300 ${yemenRegion === 'ADEN' ? 'gold-gradient text-black shadow-lg' : 'text-gray-400 hover:text-white'}`}
+              >
+                عدن
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-zinc-900/50 p-8 rounded-3xl border border-white/5 space-y-6">
-          <h3 className="text-xl font-bold flex items-center gap-2">
-            <Bell className="text-gold" />
-            إرسال تنبيه للمشتركين
-          </h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">عنوان التنبيه</label>
-              <input
-                type="text"
-                value={notifTitle}
-                onChange={(e) => setNotifTitle(e.target.value)}
-                className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 focus:border-gold outline-none"
-                placeholder="مثال: ارتفاع مفاجئ في الأسعار"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">نص الرسالة</label>
-              <textarea
-                value={notifMsg}
-                onChange={(e) => setNotifMsg(e.target.value)}
-                className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 focus:border-gold outline-none h-24"
-                placeholder="اكتب تفاصيل التنبيه هنا..."
-              />
-            </div>
-            <button
-              onClick={handleSendNotification}
-              disabled={loading}
-              className="w-full py-3 bg-white/5 hover:bg-gold hover:text-black text-gold font-bold rounded-xl transition-all"
-            >
-              إرسال الآن
-            </button>
-          </div>
-        </div>
-
-        <div className="bg-zinc-900/50 p-8 rounded-3xl border border-white/5 space-y-6">
-          <h3 className="text-xl font-bold flex items-center gap-2">
-            <Newspaper className="text-gold" />
-            نشر إعلان إداري
-          </h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">عنوان الإعلان</label>
-              <input
-                type="text"
-                value={annTitle}
-                onChange={(e) => setAnnTitle(e.target.value)}
-                className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 focus:border-gold outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">محتوى الإعلان</label>
-              <textarea
-                value={annContent}
-                onChange={(e) => setAnnContent(e.target.value)}
-                className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 focus:border-gold outline-none h-24"
-              />
-            </div>
-            <button
-              onClick={handleAddAnnouncement}
-              disabled={loading}
-              className="w-full py-3 bg-white/5 hover:bg-gold hover:text-black text-gold font-bold rounded-xl transition-all"
-            >
-              نشر في قسم الأخبار
-            </button>
-          </div>
-        </div>
-
-        <div className="bg-zinc-900/50 p-8 rounded-3xl border border-white/5 space-y-6">
-          <h3 className="text-xl font-bold flex items-center gap-2">
-            <Settings className="text-gold" />
-            إعدادات الموقع
-          </h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">اسم الموقع</label>
-              <input
-                type="text"
-                value={formData.site_name}
-                onChange={(e) => setFormData({...formData, site_name: e.target.value})}
-                className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 focus:border-gold outline-none"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-2">اللون الأساسي</label>
-                <input
-                  type="color"
-                  value={formData.primary_color}
-                  onChange={(e) => setFormData({...formData, primary_color: e.target.value})}
-                  className="w-full h-12 bg-black border border-white/10 rounded-xl p-1 cursor-pointer"
-                />
+      <main className="flex-1 max-w-7xl mx-auto w-full p-6">
+        {isLoggedIn && location.pathname === '/' && (
+          <div className="mb-8 p-4 bg-gold-soft border border-gold/30 rounded-2xl flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 gold-gradient rounded-full flex items-center justify-center text-black">
+                <Info size={16} />
               </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-2">اللون الثانوي</label>
-                <input
-                  type="color"
-                  value={formData.secondary_color}
-                  onChange={(e) => setFormData({...formData, secondary_color: e.target.value})}
-                  className="w-full h-12 bg-black border border-white/10 rounded-xl p-1 cursor-pointer"
-                />
-              </div>
+              <span className="text-sm font-bold">أنت مسجل دخول كمسؤول</span>
             </div>
-          </div>
-        </div>
-
-        <div className="bg-zinc-900/50 p-8 rounded-3xl border border-white/5 space-y-6">
-          <h3 className="text-xl font-bold flex items-center gap-2">
-            <BarChart3 className="text-gold" />
-            إعدادات الإعلانات
-          </h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">كود إعلان الهيدر</label>
-              <textarea
-                value={formData.ads_header}
-                onChange={(e) => setFormData({...formData, ads_header: e.target.value})}
-                className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 focus:border-gold outline-none h-24"
-                placeholder="<script>...</script>"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">كود إعلان الشريط الجانبي</label>
-              <textarea
-                value={formData.ads_sidebar}
-                onChange={(e) => setFormData({...formData, ads_sidebar: e.target.value})}
-                className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 focus:border-gold outline-none h-24"
-                placeholder="<script>...</script>"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">رابط الربح من الإعلانات (Ad Link)</label>
-              <input
-                type="text"
-                value={formData.ad_link}
-                onChange={(e) => setFormData({...formData, ad_link: e.target.value})}
-                className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 focus:border-gold outline-none"
-                placeholder="https://example.com/ads"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-zinc-900/50 p-8 rounded-3xl border border-white/5 space-y-6">
-          <h3 className="text-xl font-bold flex items-center gap-2">
-            <LogOut className="text-gold" />
-            تغيير كلمة مرور الإدارة
-          </h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">كلمة المرور الجديدة</label>
-              <input
-                type="password"
-                value={newAdminPassword}
-                onChange={(e) => setNewAdminPassword(e.target.value)}
-                className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 focus:border-gold outline-none"
-                placeholder="••••••••"
-              />
-            </div>
-            <button
-              onClick={handleChangePassword}
-              disabled={loading}
-              className="w-full py-3 bg-white/5 hover:bg-rose-500 hover:text-white text-rose-400 font-bold rounded-xl transition-all"
-            >
-              تحديث كلمة المرور
+            <button onClick={() => setIsAdmin(true)} className="px-4 py-2 bg-primary text-black rounded-lg text-xs font-bold hover:bg-primary/80 transition-all">
+              فتح لوحة التحكم
             </button>
           </div>
-        </div>
-      </div>
+        )}
+        <Routes>
+          <Route path="/" element={<HomePage prices={prices} chartData={chartData} news={news} currency={currency} exchangeRates={exchangeRates} lastUpdate={lastUpdate} setCurrency={setCurrency} calcAmount={calcAmount} setCalcAmount={setCalcAmount} calcType={calcType} setCalcType={setCalcType} />} />
+          <Route path="/charts" element={<ChartsPage chartData={chartData} currency={currency} />} />
+          <Route path="/news" element={<NewsPage news={news} />} />
+          <Route path="/tips" element={<TipsPage />} />
+          <Route path="/about" element={<AboutPage />} />
+        </Routes>
+      </main>
 
-      <div className="flex justify-end">
-        <button
-          onClick={handleSave}
-          disabled={loading}
-          className="px-12 py-4 gold-gradient text-black font-bold rounded-2xl shadow-xl shadow-gold/20 hover:scale-105 transition-transform disabled:opacity-50"
-        >
-          {loading ? 'جاري الحفظ...' : 'حفظ جميع التغييرات'}
-        </button>
-      </div>
+      <BottomNav onRefresh={fetchData} />
+
+      <footer className="bg-card border-t border-gold/20 py-12 px-6 mt-auto pb-32 md:pb-12 text-center">
+        <div className="max-w-7xl mx-auto space-y-8">
+          <div className="flex flex-col items-center gap-4">
+            <div className="flex items-center gap-2 text-primary">
+              <Coins size={32} />
+              <span className="text-2xl font-bold gold-text-gradient">أسعار الذهب المباشرة</span>
+            </div>
+            <p className="text-gray-500 text-sm max-w-md mx-auto">أدق منصة لمتابعة أسعار الذهب العالمية والمحلية لحظة بلحظة مع تحليلات فنية شاملة.</p>
+            <div className="flex items-center gap-2 text-primary text-sm font-bold">
+              <Mail size={16} />
+              <span>qydalrfyd@gmail.com</span>
+            </div>
+          </div>
+          
+          <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-gray-500 text-xs font-bold">
+            <span>جميع الحقوق محفوظة © 2026 أسعار الذهب المباشرة</span>
+            {isLoggedIn && (
+              <button onClick={() => { localStorage.removeItem('admin_token'); window.location.reload(); }} className="hover:text-red-500 transition-colors">تسجيل الخروج</button>
+            )}
+          </div>
+        </div>
+      </footer>
     </div>
   );
-};
-
-// --- Main App ---
+}
 
 export default function App() {
-  const [activePage, setActivePage] = useState('home');
-  const [latestPrice, setLatestPrice] = useState(null);
-  const [history, setHistory] = useState([]);
-  const [news, setNews] = useState([]);
-  const [settings, setSettings] = useState({});
-  const [exchangeRates, setExchangeRates] = useState<any>({ USD: 1 });
-  const [selectedCurrency, setSelectedCurrency] = useState(localStorage.getItem('selected_currency') || 'USD');
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const fetchData = async (isManual = false) => {
-    if (isManual) setRefreshing(true);
-    try {
-      const [priceRes, historyRes, newsRes, settingsRes, ratesRes] = await Promise.all([
-        axios.get('/api/prices/latest'),
-        axios.get('/api/prices/history'),
-        axios.get('/api/news'),
-        axios.get('/api/settings'),
-        axios.get('/api/exchange-rates')
-      ]);
-      setLatestPrice(priceRes.data);
-      setHistory(historyRes.data);
-      setNews(newsRes.data);
-      setSettings(settingsRes.data);
-      setExchangeRates(ratesRes.data);
-    } catch (err) {
-      console.error('Error fetching data:', err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  useEffect(() => {
-    localStorage.setItem('selected_currency', selectedCurrency);
-  }, [selectedCurrency]);
-
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(() => fetchData(), 60000); // Refresh every minute
-    return () => clearInterval(interval);
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-          className="w-12 h-12 border-4 border-gold border-t-transparent rounded-full"
-        />
-      </div>
-    );
-  }
-
   return (
     <HelmetProvider>
-      <div className="min-h-screen flex flex-col font-sans">
-        <Helmet>
-          <title>{settings.site_name} | أسعار الذهب لحظة بلحظة</title>
-          <meta name="description" content="موقع مراقب الذهب يوفر لك أسعار الذهب العالمية والمحلية مباشرة، مع تحليلات فنية وأخبار اقتصادية حصرية." />
-          <meta name="keywords" content="سعر الذهب اليوم، أسعار الذهب، الذهب في السعودية، الذهب في مصر، الذهب في الإمارات، الذهب في الكويت، الذهب في اليمن، تحليلات الذهب، أخبار الذهب، استثمار الذهب، سبائك الذهب، عيار 21، عيار 24، عيار 18، بورصة الذهب، سعر الذهب مباشر" />
-          <html lang="ar" dir="rtl" />
-        </Helmet>
-
-        <Navbar 
-          activePage={activePage} 
-          setActivePage={setActivePage} 
-          settings={settings} 
-          selectedCurrency={selectedCurrency}
-          setSelectedCurrency={setSelectedCurrency}
-          onRefresh={() => fetchData(true)}
-          refreshing={refreshing}
-        />
-
-        <main className="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full pb-24 md:pb-8">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activePage}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.3 }}
-            >
-              {activePage === 'home' && (
-                <HomePage 
-                  latestPrice={latestPrice} 
-                  news={news} 
-                  settings={settings} 
-                  selectedCurrency={selectedCurrency}
-                  exchangeRate={exchangeRates[selectedCurrency] || 1}
-                  onRefresh={() => fetchData(true)}
-                  refreshing={refreshing}
-                />
-              )}
-              {activePage === 'charts' && (
-                <ChartsPage 
-                  history={history} 
-                  selectedCurrency={selectedCurrency}
-                  exchangeRate={exchangeRates[selectedCurrency] || 1}
-                />
-              )}
-              {activePage === 'news' && (
-                <div className="py-8 space-y-8">
-                  <h1 className="text-3xl font-bold">أخبار الذهب والاقتصاد</h1>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {news.map(item => <NewsCard key={item.id} item={item} />)}
-                  </div>
-                </div>
-              )}
-              {activePage === 'tips' && (
-                <div className="py-8 max-w-3xl mx-auto space-y-8">
-                  <h1 className="text-3xl font-bold text-center">نصائح الاستثمار في الذهب</h1>
-                  <div className="space-y-6">
-                    {[
-                      { title: 'التنويع هو المفتاح', content: 'لا تضع كل أموالك في الذهب. يفضل أن يمثل الذهب من 5% إلى 10% من محفظتك الاستثمارية.' },
-                      { title: 'الاستثمار طويل الأمد', content: 'الذهب هو ملاذ آمن ومخزن للقيمة على المدى الطويل. لا تتوقع أرباحاً سريعة من المضاربة اليومية.' },
-                      { title: 'متابعة الأخبار العالمية', content: 'تتأثر أسعار الذهب بقوة بالقرارات السياسية والاقتصادية العالمية، خاصة قرارات الفيدرالي الأمريكي.' },
-                      { title: 'اختيار السبائك والعملات', content: 'عند الاستثمار، يفضل شراء السبائك والعملات الذهبية لتقليل تكاليف المصنعية مقارنة بالمجوهرات.' }
-                    ].map((tip, i) => (
-                      <div key={i} className="bg-zinc-900/50 p-6 rounded-2xl border border-white/5">
-                        <h3 className="text-xl font-bold text-gold mb-3">{tip.title}</h3>
-                        <p className="text-gray-400 leading-relaxed">{tip.content}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {activePage === 'about' && (
-                <div className="py-8 max-w-3xl mx-auto text-center space-y-8">
-                  <div className="w-24 h-24 gold-gradient rounded-3xl mx-auto flex items-center justify-center shadow-2xl shadow-gold/20">
-                    <TrendingUp className="text-black w-12 h-12" />
-                  </div>
-                  <h1 className="text-3xl font-bold">{settings.site_name}</h1>
-                  <p className="text-gray-400 text-lg leading-relaxed">
-                    نحن منصة رائدة متخصصة في توفير بيانات دقيقة ولحظية لأسعار الذهب العالمية. هدفنا هو تمكين المستثمرين والأفراد من الوصول إلى المعلومات التي يحتاجونها لاتخاذ قرارات مالية حكيمة.
-                  </p>
-                  <div className="grid grid-cols-3 gap-4 pt-8">
-                    <div>
-                      <div className="text-2xl font-bold text-gold">+10K</div>
-                      <div className="text-xs text-gray-500">زائر يومي</div>
-                    </div>
-                    <div>
-                      <div className="text-2xl font-bold text-gold">24/7</div>
-                      <div className="text-xs text-gray-500">تحديث مباشر</div>
-                    </div>
-                    <div>
-                      <div className="text-2xl font-bold text-gold">100%</div>
-                      <div className="text-xs text-gray-500">دقة البيانات</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-              {activePage === 'admin' && <AdminPanel settings={settings} onUpdateSettings={setSettings} />}
-            </motion.div>
-          </AnimatePresence>
-        </main>
-
-        <BottomNav activePage={activePage} setActivePage={setActivePage} onRefresh={() => fetchData(true)} refreshing={refreshing} />
-
-        <footer className="bg-black border-t border-white/5 py-12 mt-20 pb-32 md:pb-12">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 gold-gradient rounded flex items-center justify-center">
-                    <TrendingUp className="text-black w-5 h-5" />
-                  </div>
-                  <span className="text-xl font-bold gold-text">{settings.site_name}</span>
-                </div>
-                <p className="text-gray-500 text-sm leading-relaxed">
-                  منصتكم الموثوقة لمتابعة أسعار الذهب العالمية والمحلية. بيانات دقيقة، أخبار حصرية، وتحليلات فنية.
-                </p>
-              </div>
-              <div className="space-y-4">
-                <h4 className="text-white font-bold">روابط سريعة</h4>
-                <ul className="space-y-2 text-sm text-gray-500">
-                  <li><button onClick={() => setActivePage('home')} className="hover:text-gold transition-colors">الرئيسية</button></li>
-                  <li><button onClick={() => setActivePage('charts')} className="hover:text-gold transition-colors">الرسوم البيانية</button></li>
-                  <li><button onClick={() => setActivePage('news')} className="hover:text-gold transition-colors">الأخبار</button></li>
-                  <li><button onClick={() => setActivePage('tips')} className="hover:text-gold transition-colors">نصائح الاستثمار</button></li>
-                </ul>
-              </div>
-              <div className="space-y-4">
-                <h4 className="text-white font-bold">تواصل معنا</h4>
-                <a href="mailto:qydalrfyd@gmail.com" className="text-gray-500 text-sm hover:text-gold transition-colors">
-                  qydalrfyd@gmail.com
-                </a>
-                <div className="flex gap-4">
-                  <a href="#" className="w-10 h-10 bg-zinc-900 rounded-full flex items-center justify-center hover:bg-gold hover:text-black transition-all cursor-pointer">
-                    <Facebook className="w-5 h-5" />
-                  </a>
-                  <a href="#" className="w-10 h-10 bg-zinc-900 rounded-full flex items-center justify-center hover:bg-gold hover:text-black transition-all cursor-pointer">
-                    <Twitter className="w-5 h-5" />
-                  </a>
-                  <a href="#" className="w-10 h-10 bg-zinc-900 rounded-full flex items-center justify-center hover:bg-gold hover:text-black transition-all cursor-pointer">
-                    <Instagram className="w-5 h-5" />
-                  </a>
-                </div>
-              </div>
-            </div>
-            <div className="border-t border-white/5 mt-12 pt-8 text-center text-gray-600 text-xs">
-              جميع الحقوق محفوظة © {new Date().getFullYear()} {settings.site_name}
-            </div>
-          </div>
-        </footer>
-      </div>
+      <Router>
+        <AppContent />
+      </Router>
     </HelmetProvider>
   );
 }

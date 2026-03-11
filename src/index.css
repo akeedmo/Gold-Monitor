@@ -1,44 +1,65 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap');
 
 @theme {
-  --font-sans: "Cairo", ui-sans-serif, system-ui, sans-serif;
-  --color-gold: #D4AF37;
-  --color-gold-light: #F1E5AC;
-  --color-gold-dark: #A67C00;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-primary: #D4AF37;
+  --color-secondary: #ffffff;
+  --color-bg: #000000;
+  --color-card: #111111;
+  --color-up: #4ade80;
+  --color-down: #f87171;
 }
 
-body {
-  direction: rtl;
-  text-align: right;
-  background-color: #0a0a0a;
-  color: #ffffff;
+@layer base {
+  body {
+    @apply bg-bg text-secondary font-sans antialiased;
+  }
+}
+
+.card-shadow {
+  box-shadow: 0 4px 20px -1px rgba(212, 175, 55, 0.1), 0 2px 10px -1px rgba(0, 0, 0, 0.5);
 }
 
 .gold-gradient {
-  background: linear-gradient(135deg, #D4AF37 0%, #F1E5AC 50%, #A67C00 100%);
+  background: linear-gradient(135deg, #D4AF37 0%, #F9E29C 50%, #D4AF37 100%);
 }
 
-.gold-text {
-  background: linear-gradient(135deg, #D4AF37 0%, #F1E5AC 50%, #A67C00 100%);
+.gold-text-gradient {
+  background: linear-gradient(135deg, #D4AF37 0%, #F9E29C 50%, #D4AF37 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
-/* Custom scrollbar */
+.border-gold {
+  border-color: rgba(212, 175, 55, 0.2);
+}
+
+.bg-gold-soft {
+  background-color: rgba(212, 175, 55, 0.05);
+}
+
+.ticker-animation {
+  animation: ticker 30s linear infinite;
+}
+
+@keyframes ticker {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
 ::-webkit-scrollbar {
   width: 8px;
 }
-
 ::-webkit-scrollbar-track {
-  background: #1a1a1a;
+  background: #000000;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: #D4AF37;
+  background: #222222;
   border-radius: 4px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: #A67C00;
+  background: #D4AF37;
 }
