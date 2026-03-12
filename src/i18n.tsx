@@ -86,6 +86,16 @@ export const translations: Translations = {
     en: "View All News",
     tr: "Tüm Haberleri Gör"
   },
+  "share_app": {
+    ar: "مشاركة الموقع",
+    en: "Share App",
+    tr: "Uygulamayı Paylaş"
+  },
+  "link_copied": {
+    ar: "تم نسخ رابط المشاركة!",
+    en: "Share link copied!",
+    tr: "Paylaşım bağlantısı kopyalandı!"
+  },
   "subscribers_list": {
     ar: "قائمة المشتركين",
     en: "Subscribers List",

@@ -21,7 +21,8 @@ import {
   Settings,
   Eye,
   Heart,
-  Languages
+  Languages,
+  Share2
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { 
@@ -768,6 +769,25 @@ function AppContent() {
     window.scrollTo(0, 0);
   }, [location.pathname]);
 
+  const handleShare = async () => {
+    const shareData = {
+      title: 'أسعار الذهب المباشرة',
+      text: `🌟 المنصة الشاملة لأسعار الذهب المباشرة: بوصلتك في عالم الاستثمار 🌟\n\nهل تبحث عن مصدر موثوق وسريع لمتابعة أسعار الذهب لحظة بلحظة؟\nفي عالم تتسارع فيه التغيرات الاقتصادية، تعتبر منصتنا "أسعار الذهب المباشرة" أداتك الأقوى للبقاء في صدارة السوق. نحن لا نقدم لك مجرد أرقام، بل نضع بين يديك منصة متكاملة تجمع بين دقة البيانات، وسرعة التنبيهات، وعمق التحليل الاقتصادي.\n\n👇 لا تدع الفرصة تفوتك!\nقم بزيارة الموقع الآن، اشترك في القائمة البريدية، وفعّل الإشعارات لتكون أول من يعلم بتحركات السوق.\n`,
+      url: 'https://gold-monitor-production.up.railway.app/'
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard.writeText(`${shareData.text}\n${shareData.url}`);
+        alert(t('link_copied') || 'تم نسخ رابط المشاركة!');
+      }
+    } catch (err) {
+      console.error('Error sharing:', err);
+    }
+  };
+
   const fetchData = async (force = false) => {
     const isInitial = prices[0].price === 0;
     if (isInitial) setLoading(true);
@@ -878,6 +898,10 @@ function AppContent() {
                 <Link to="/news" className={location.pathname === '/news' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_news')}</Link>
                 <Link to="/tips" className={location.pathname === '/tips' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_tips')}</Link>
                 <Link to="/about" className={location.pathname === '/about' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_about')}</Link>
+                <button onClick={handleShare} className="text-gray-400 hover:text-primary flex items-center gap-1">
+                  <Share2 size={16} />
+                  {t('share_app') || 'مشاركة'}
+                </button>
               </nav>
               <div className="h-4 w-[1px] bg-white/10" />
               <button className="p-2 text-gray-400 hover:text-primary transition-colors">
@@ -909,6 +933,13 @@ function AppContent() {
                 <Link to="/news" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_news')}</Link>
                 <Link to="/tips" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_tips')}</Link>
                 <Link to="/about" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_about')}</Link>
+                <button 
+                  onClick={() => { handleShare(); setIsMenuOpen(false); }} 
+                  className="flex items-center gap-2 text-gray-400 hover:text-primary text-right"
+                >
+                  <Share2 size={18} />
+                  <span>{t('share_app') || 'مشاركة الموقع'}</span>
+                </button>
                 <button 
                   onClick={() => { setIsAdmin(true); setIsMenuOpen(false); }} 
                   className="flex items-center gap-2 text-primary pt-4 border-t border-white/5"
