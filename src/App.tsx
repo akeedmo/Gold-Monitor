@@ -149,6 +149,25 @@ const NewsCard = (props: any) => {
   );
 };
 
+const CurrencyLanguageSelector = ({ currency, setCurrency, language, setLanguage }: any) => {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-center gap-2 bg-white/5 px-3 py-2 rounded-lg border border-gold/20">
+      <Languages size={14} className="text-primary" />
+      <select value={language} onChange={(e) => setLanguage(e.target.value as any)} className="bg-transparent text-sm font-bold text-white focus:outline-none cursor-pointer">
+        <option value="ar" className="bg-card">العربية</option>
+        <option value="en" className="bg-card">English</option>
+        <option value="tr" className="bg-card">Türkçe</option>
+      </select>
+      <div className="h-4 w-[1px] bg-white/10" />
+      <Coins size={14} className="text-primary" />
+      <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="bg-transparent text-sm font-bold text-white focus:outline-none cursor-pointer">
+        {['USD', 'EUR', 'SAR', 'AED', 'GBP', 'KWD', 'QAR', 'BHD', 'OMR', 'JOD', 'EGP', 'LYD', 'YER'].map(code => <option key={code} value={code} className="bg-card">{code}</option>)}
+      </select>
+    </div>
+  );
+};
+
 const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate, setCurrency, setLanguage, calcAmount, setCalcAmount, calcType, setCalcType }: any) => {
   const { t, language } = useTranslation();
   const locale = language === 'ar' ? 'ar-SA' : language === 'tr' ? 'tr-TR' : 'en-US';
@@ -179,14 +198,7 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
       {/* Welcome */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 bg-white/5 px-3 py-2 rounded-lg border border-gold/20">
-            <Languages size={14} className="text-primary" />
-            <select value={language} onChange={(e) => setLanguage(e.target.value as any)} className="bg-transparent text-sm font-bold text-white focus:outline-none cursor-pointer">
-              <option value="ar" className="bg-card">العربية</option>
-              <option value="en" className="bg-card">English</option>
-              <option value="tr" className="bg-card">Türkçe</option>
-            </select>
-          </div>
+          <CurrencyLanguageSelector currency={currency} setCurrency={setCurrency} language={language} setLanguage={setLanguage} />
         </div>
         <div className="flex flex-col md:items-end">
           <h2 className="text-3xl font-bold gold-text-gradient">{t('market_overview')}</h2>
@@ -268,8 +280,8 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
   );
 };
 
-const ChartsPage = ({ chartData, currency }: any) => {
-  const { t, language } = useTranslation();
+const ChartsPage = ({ chartData, currency, setCurrency, language, setLanguage }: any) => {
+  const { t } = useTranslation();
   const locale = language === 'ar' ? 'ar-SA' : language === 'tr' ? 'tr-TR' : 'en-US';
   const [timeRange, setTimeRange] = useState('D1');
   const [isChanging, setIsChanging] = useState(false);
@@ -304,6 +316,9 @@ const ChartsPage = ({ chartData, currency }: any) => {
         <meta name="description" content={t('meta_desc_charts')} />
       </Helmet>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <CurrencyLanguageSelector currency={currency} setCurrency={setCurrency} language={language} setLanguage={setLanguage} />
+        </div>
         <h2 className="text-3xl font-bold gold-text-gradient">{t('charts_analysis')}</h2>
         <div className="flex bg-[#161a1e] p-1 rounded-lg border border-white/5">
           {['H1', 'H2', 'D1', 'M1', 'Y1'].map((range) => (
@@ -811,7 +826,7 @@ function AppContent() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 60000); // 1 min
+    const interval = setInterval(fetchData, 300000); // 5 min
     return () => clearInterval(interval);
   }, [currency, yemenRegion]);
 
@@ -829,8 +844,8 @@ function AppContent() {
 
   return (
     <div className="min-h-screen flex flex-col bg-bg text-secondary" dir={isRTL ? "rtl" : "ltr"}>
-      <header className="bg-card border-b border-gold/20 px-6 py-4 sticky top-0 z-50 shadow-2xl">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
+      <header className="bg-card border-b border-gold/20 sticky top-0 z-50 shadow-2xl">
+        <div className="max-w-7xl mx-auto w-full px-6 py-2 flex justify-between items-center">
           <div className="flex items-center gap-4">
             <Link to="/" className="w-10 h-10 gold-gradient rounded-lg flex items-center justify-center text-black shadow-lg shrink-0">
               <Coins size={24} />
@@ -845,12 +860,6 @@ function AppContent() {
                 >
                   <Settings size={18} />
                 </button>
-                <div className="flex items-center gap-2 bg-white/5 px-2 py-1 rounded-lg border border-gold/20">
-                  <Coins size={12} className="text-primary" />
-                  <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="bg-transparent text-[10px] font-bold text-white focus:outline-none cursor-pointer">
-                    {Object.keys(exchangeRates).filter(c => !c.startsWith('YER_')).map(code => <option key={code} value={code} className="bg-card">{code}</option>)}
-                  </select>
-                </div>
               </div>
               <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold">
                 <span>{currentTime.toLocaleDateString(locale, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
@@ -860,34 +869,28 @@ function AppContent() {
             </div>
           </div>
 
-          <div className="hidden md:flex items-center gap-4">
-            <nav className="flex gap-6 text-sm font-semibold">
-              <Link to="/" className={location.pathname === '/' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_home')}</Link>
-              <Link to="/charts" className={location.pathname === '/charts' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_charts')}</Link>
-              <Link to="/news" className={location.pathname === '/news' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_news')}</Link>
-              <Link to="/tips" className={location.pathname === '/tips' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_tips')}</Link>
-              <Link to="/about" className={location.pathname === '/about' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_about')}</Link>
-            </nav>
-            <div className="h-4 w-[1px] bg-white/10" />
-            <button className="p-2 text-gray-400 hover:text-primary transition-colors">
-              <Bell size={20} />
-            </button>
+          <div className="flex items-center gap-4">
+            <div className="hidden md:flex items-center gap-4">
+              <nav className="flex gap-6 text-sm font-semibold">
+                <Link to="/" className={location.pathname === '/' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_home')}</Link>
+                <Link to="/charts" className={location.pathname === '/charts' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_charts')}</Link>
+                <Link to="/news" className={location.pathname === '/news' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_news')}</Link>
+                <Link to="/tips" className={location.pathname === '/tips' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_tips')}</Link>
+                <Link to="/about" className={location.pathname === '/about' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_about')}</Link>
+              </nav>
+              <div className="h-4 w-[1px] bg-white/10" />
+              <button className="p-2 text-gray-400 hover:text-primary transition-colors">
+                <Bell size={20} />
+              </button>
+            </div>
             <button 
               onClick={() => setIsMenuOpen(!isMenuOpen)} 
-              className="p-2 text-gray-400 hover:text-primary transition-colors"
+              className="p-3 text-gray-400 hover:text-primary transition-colors"
             >
-              <Menu size={24} />
+              <Menu size={32} />
             </button>
           </div>
 
-          <div className="flex items-center gap-2 md:hidden">
-            <button 
-              onClick={() => setIsMenuOpen(!isMenuOpen)} 
-              className="p-2 text-gray-400 hover:text-primary transition-colors"
-            >
-              <Menu size={24} />
-            </button>
-          </div>
         </div>
 
         {/* Mobile Menu */}
@@ -950,7 +953,7 @@ function AppContent() {
         </div>
       )}
 
-      <main className="flex-1 max-w-7xl mx-auto w-full p-6">
+      <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-6">
         {isLoggedIn && location.pathname === '/' && (
           <div className="mb-8 p-4 bg-gold-soft border border-gold/30 rounded-2xl flex justify-between items-center">
             <div className="flex items-center gap-3">
@@ -966,7 +969,7 @@ function AppContent() {
         )}
         <Routes>
           <Route path="/" element={<HomePage prices={prices} chartData={chartData} news={news} currency={currency} exchangeRates={exchangeRates} lastUpdate={lastUpdate} setCurrency={setCurrency} setLanguage={setLanguage} calcAmount={calcAmount} setCalcAmount={setCalcAmount} calcType={calcType} setCalcType={setCalcType} />} />
-          <Route path="/charts" element={<ChartsPage chartData={chartData} currency={currency} />} />
+          <Route path="/charts" element={<ChartsPage chartData={chartData} currency={currency} setCurrency={setCurrency} language={language} setLanguage={setLanguage} />} />
           <Route path="/news" element={<NewsPage news={news} />} />
           <Route path="/tips" element={<TipsPage />} />
           <Route path="/about" element={<AboutPage />} />
@@ -976,7 +979,7 @@ function AppContent() {
       <BottomNav onRefresh={() => fetchData(true)} />
 
       <footer className="bg-card border-t border-gold/20 py-12 px-6 mt-auto pb-32 md:pb-12 text-center">
-        <div className="max-w-7xl mx-auto space-y-8">
+        <div className="max-w-7xl mx-auto w-full space-y-8">
           <div className="flex flex-col items-center gap-4">
             <div className="flex items-center gap-2 text-primary">
               <Coins size={32} />
