@@ -179,6 +179,7 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
     try {
       await axios.post('/api/subscribe', { email });
       alert(t('subscribed_successfully'));
+      setEmail('');
     } catch (error) {
       console.error("Subscription failed", error);
     } finally {

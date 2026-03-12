@@ -8,6 +8,7 @@ import Parser from "rss-parser";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+import nodemailer from "nodemailer";
 
 dotenv.config();
 
@@ -144,31 +145,36 @@ app.post("/api/admin/change-password", authenticate, async (req, res) => {
 });
 
 app.get("/api/admin/stats", authenticate, async (req, res) => {
-  const totalVisits = await db.get("SELECT COUNT(*) as count FROM visits");
-  const todayVisits = await db.get("SELECT COUNT(*) as count FROM visits WHERE timestamp > date('now')");
-  const weekVisits = await db.get("SELECT COUNT(*) as count FROM visits WHERE timestamp > date('now', '-7 days')");
-  const monthVisits = await db.get("SELECT COUNT(*) as count FROM visits WHERE timestamp > date('now', '-30 days')");
-  
-  const history = await db.all(`
-    SELECT date(timestamp) as date, COUNT(*) as count 
-    FROM visits 
-    WHERE timestamp > date('now', '-30 days') 
-    GROUP BY date(timestamp)
-    ORDER BY date ASC
-  `);
-  
-  const latestPrice = await db.get("SELECT * FROM prices ORDER BY timestamp DESC LIMIT 1");
-  const totalNews = await db.get("SELECT COUNT(*) as count FROM news");
-  
-  res.json({
-    total: totalVisits?.count || 0,
-    today: todayVisits?.count || 0,
-    week: weekVisits?.count || 0,
-    month: monthVisits?.count || 0,
-    history: history || [],
-    latestPrice: latestPrice || null,
-    totalNews: totalNews?.count || 0
-  });
+  try {
+    const latestPrice = await db.get("SELECT * FROM prices ORDER BY timestamp DESC LIMIT 1");
+    const totalNews = await db.get("SELECT COUNT(*) as count FROM news");
+
+    const totalVisits = await db.get("SELECT COUNT(*) as count FROM visits");
+    const todayVisits = await db.get("SELECT COUNT(*) as count FROM visits WHERE timestamp > date('now')");
+    const weekVisits = await db.get("SELECT COUNT(*) as count FROM visits WHERE timestamp > date('now', '-7 days')");
+    const monthVisits = await db.get("SELECT COUNT(*) as count FROM visits WHERE timestamp > date('now', '-30 days')");
+    
+    const history = await db.all(`
+      SELECT date(timestamp) as date, COUNT(*) as count 
+      FROM visits 
+      WHERE timestamp > date('now', '-30 days') 
+      GROUP BY date(timestamp)
+      ORDER BY date ASC
+    `);
+    
+    res.json({
+      total: totalVisits?.count || 0,
+      today: todayVisits?.count || 0,
+      week: weekVisits?.count || 0,
+      month: monthVisits?.count || 0,
+      history: history || [],
+      latestPrice: latestPrice || null,
+      totalNews: totalNews?.count || 0
+    });
+  } catch (error) {
+    console.error("Stats error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 app.post("/api/admin/settings", authenticate, async (req, res) => {
@@ -261,8 +267,31 @@ app.get("/api/settings", async (req, res) => {
   res.json(settingsObj);
 });
 
+app.post("/api/subscribe", async (req, res) => {
+  const { email } = req.body;
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({ error: "Invalid email" });
+  }
+  try {
+    await db.run("INSERT OR IGNORE INTO subscribers (email) VALUES (?)", [email]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Subscribe error:", error);
+    res.status(500).json({ error: "Failed to subscribe" });
+  }
+});
+
+app.get("/api/admin/subscribers", authenticate, async (req, res) => {
+  try {
+    const subscribers = await db.all("SELECT * FROM subscribers ORDER BY subscribed_at DESC");
+    res.json(subscribers);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch subscribers" });
+  }
+});
+
 app.post("/api/admin/notifications", authenticate, async (req, res) => {
-  const { title, message } = req.body;
+  const { title, message, emails } = req.body;
   const appId = process.env.VITE_ONESIGNAL_APP_ID;
   const apiKey = process.env.ONESIGNAL_REST_API_KEY;
 
@@ -285,6 +314,66 @@ app.post("/api/admin/notifications", authenticate, async (req, res) => {
       );
     } catch (error) {
       console.error("OneSignal Error:", error);
+    }
+  }
+
+  // Send emails if emails array is provided
+  if (emails && Array.isArray(emails) && emails.length > 0) {
+    try {
+      // Create a test account if no real SMTP is provided
+      // In production, configure SMTP in .env
+      const smtpHost = process.env.SMTP_HOST;
+      const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587;
+      const smtpUser = process.env.SMTP_USER;
+      const smtpPass = process.env.SMTP_PASS;
+
+      let transporter;
+      
+      if (smtpHost && smtpUser && smtpPass) {
+        transporter = nodemailer.createTransport({
+          host: smtpHost,
+          port: smtpPort,
+          secure: smtpPort === 465,
+          auth: {
+            user: smtpUser,
+            pass: smtpPass,
+          },
+        });
+      } else {
+        // Fallback to test account for preview
+        const testAccount = await nodemailer.createTestAccount();
+        transporter = nodemailer.createTransport({
+          host: "smtp.ethereal.email",
+          port: 587,
+          secure: false,
+          auth: {
+            user: testAccount.user,
+            pass: testAccount.pass,
+          },
+        });
+        console.log("Using Ethereal test email account");
+      }
+
+      const mailOptions = {
+        from: `"أسعار الذهب" <${smtpUser || 'noreply@example.com'}>`,
+        to: emails.join(','),
+        subject: title,
+        text: message,
+        html: `<div dir="rtl" style="font-family: Arial, sans-serif; padding: 20px; background-color: #f9f9f9; border-radius: 10px;">
+                 <h2 style="color: #D4AF37;">${title}</h2>
+                 <p style="font-size: 16px; color: #333; white-space: pre-wrap;">${message}</p>
+                 <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+                 <p style="font-size: 12px; color: #999;">تلقيت هذه الرسالة لأنك مشترك في تنبيهات أسعار الذهب.</p>
+               </div>`,
+      };
+
+      const info = await transporter.sendMail(mailOptions);
+      console.log("Message sent: %s", info.messageId);
+      if (!smtpHost) {
+        console.log("Preview URL: %s", nodemailer.getTestMessageUrl(info));
+      }
+    } catch (error) {
+      console.error("Email sending error:", error);
     }
   }
 
@@ -523,6 +612,13 @@ async function initDB() {
       title TEXT,
       message TEXT,
       sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS subscribers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT UNIQUE,
+      subscribed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      status TEXT DEFAULT 'active'
     );
   `);
 

@@ -68,6 +68,8 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   // Form states
   const [notifTitle, setNotifTitle] = useState('');
   const [notifMessage, setNotifMessage] = useState('');
+  const [subscribers, setSubscribers] = useState<any[]>([]);
+  const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
   const [announcementTitle, setAnnouncementTitle] = useState('');
   const [announcementContent, setAnnouncementContent] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -117,18 +119,20 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     if (!token) return;
     try {
       const config = { headers: { Authorization: `Bearer ${token}` } };
-      const [statsRes, settingsRes, newsRes, notifRes, ratesRes] = await Promise.all([
+      const [statsRes, settingsRes, newsRes, notifRes, ratesRes, subsRes] = await Promise.all([
         axios.get('/api/admin/stats', config),
         axios.get('/api/settings'),
         axios.get('/api/news'),
         axios.get('/api/admin/notifications', config),
-        axios.get('/api/exchange-rates')
+        axios.get('/api/exchange-rates'),
+        axios.get('/api/admin/subscribers', config)
       ]);
       setStats(statsRes.data);
       setSettings(settingsRes.data);
       setNews(newsRes.data);
       setNotifications(notifRes.data);
       setExchangeRates(ratesRes.data);
+      setSubscribers(subsRes.data);
     } catch (err) {
       localStorage.removeItem('admin_token');
       setToken(null);
@@ -173,12 +177,13 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     setSaveLoading(true);
     setError('');
     try {
-      await axios.post('/api/admin/notifications', { title: notifTitle, message: notifMessage }, {
+      await axios.post('/api/admin/notifications', { title: notifTitle, message: notifMessage, emails: selectedEmails }, {
         headers: { Authorization: `Bearer ${token}` }
       });
       showSuccess(t('success_alert_sent'));
       setNotifTitle('');
       setNotifMessage('');
+      setSelectedEmails([]);
       fetchData();
     } catch (err) {
       setError(t('error_alert_send_failed'));
@@ -390,8 +395,56 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
           )}
 
           {activeTab === 'notifications' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div className="bg-card p-8 rounded-2xl border border-gold/10 shadow-lg space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-1 bg-card p-8 rounded-2xl border border-gold/10 shadow-lg space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-white">{t('subscribers_list') || 'قائمة المشتركين'}</h3>
+                  <span className="text-xs bg-primary/20 text-primary px-2 py-1 rounded-md">{subscribers.length}</span>
+                </div>
+                <div className="flex items-center gap-2 mb-4">
+                  <input 
+                    type="checkbox" 
+                    id="selectAll"
+                    checked={selectedEmails.length === subscribers.length && subscribers.length > 0}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedEmails(subscribers.map(s => s.email));
+                      } else {
+                        setSelectedEmails([]);
+                      }
+                    }}
+                    className="w-4 h-4 accent-primary rounded cursor-pointer"
+                  />
+                  <label htmlFor="selectAll" className="text-sm text-gray-300 cursor-pointer">{t('select_all') || 'تحديد الكل'}</label>
+                </div>
+                <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                  {subscribers.map(sub => (
+                    <div key={sub.id} className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/10 hover:border-primary/30 transition-colors">
+                      <input 
+                        type="checkbox" 
+                        id={`sub-${sub.id}`}
+                        checked={selectedEmails.includes(sub.email)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedEmails([...selectedEmails, sub.email]);
+                          } else {
+                            setSelectedEmails(selectedEmails.filter(email => email !== sub.email));
+                          }
+                        }}
+                        className="w-4 h-4 accent-primary rounded cursor-pointer"
+                      />
+                      <label htmlFor={`sub-${sub.id}`} className="text-sm text-gray-300 cursor-pointer flex-1 truncate" dir="ltr">
+                        {sub.email}
+                      </label>
+                    </div>
+                  ))}
+                  {subscribers.length === 0 && (
+                    <p className="text-sm text-gray-500 text-center py-4">{t('no_subscribers') || 'لا يوجد مشتركون'}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="lg:col-span-1 bg-card p-8 rounded-2xl border border-gold/10 shadow-lg space-y-6">
                 <h3 className="text-lg font-bold flex items-center gap-2 text-white">
                   <Plus size={20} className="text-primary" />
                   {t('send_new_alert')}
@@ -411,13 +464,19 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                     onChange={(e) => setNotifMessage(e.target.value)}
                     className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-primary"
                   />
-                  <button onClick={handleSendNotification} disabled={saveLoading} className="w-full py-3 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                  <div className="text-xs text-gray-400">
+                    {selectedEmails.length > 0 ? 
+                      <span className="text-primary">{selectedEmails.length} {t('subscribers_selected') || 'مشترك محدد'}</span> : 
+                      <span>{t('no_subscribers_selected') || 'سيتم الإرسال كتنبيه عام فقط'}</span>
+                    }
+                  </div>
+                  <button onClick={handleSendNotification} disabled={saveLoading || !notifTitle || !notifMessage} className="w-full py-3 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
                     {saveLoading ? <RefreshCw className="animate-spin" size={18} /> : t('send_now')}
                   </button>
                 </div>
               </div>
 
-              <div className="bg-card p-8 rounded-2xl border border-gold/10 shadow-lg space-y-6">
+              <div className="lg:col-span-1 bg-card p-8 rounded-2xl border border-gold/10 shadow-lg space-y-6">
                 <h3 className="text-lg font-bold text-white">{t('alert_history')}</h3>
                 <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                   {notifications.map(n => (

@@ -86,6 +86,31 @@ export const translations: Translations = {
     en: "View All News",
     tr: "Tüm Haberleri Gör"
   },
+  "subscribers_list": {
+    ar: "قائمة المشتركين",
+    en: "Subscribers List",
+    tr: "Aboneler Listesi"
+  },
+  "select_all": {
+    ar: "تحديد الكل",
+    en: "Select All",
+    tr: "Tümünü Seç"
+  },
+  "no_subscribers": {
+    ar: "لا يوجد مشتركون",
+    en: "No subscribers",
+    tr: "Abone yok"
+  },
+  "subscribers_selected": {
+    ar: "مشترك محدد",
+    en: "subscriber(s) selected",
+    tr: "abone seçildi"
+  },
+  "no_subscribers_selected": {
+    ar: "سيتم الإرسال كتنبيه عام فقط",
+    en: "Will be sent as general alert only",
+    tr: "Sadece genel uyarı olarak gönderilecek"
+  },
   "subscribe_alerts": {
     ar: "اشترك في تنبيهات الأسعار",
     en: "Subscribe to Price Alerts",
