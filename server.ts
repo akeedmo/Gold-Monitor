@@ -317,45 +317,26 @@ app.post("/api/admin/notifications", authenticate, async (req, res) => {
     }
   }
 
-  // Send emails if emails array is provided
+  // Send emails if emails array is provided (Non-blocking)
   if (emails && Array.isArray(emails) && emails.length > 0) {
-    try {
-      // Create a test account if no real SMTP is provided
-      // In production, configure SMTP in .env
-      const smtpHost = process.env.SMTP_HOST;
-      const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587;
-      const smtpUser = process.env.SMTP_USER;
-      const smtpPass = process.env.SMTP_PASS;
+    const smtpHost = process.env.SMTP_HOST;
+    const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587;
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
 
-      let transporter;
-      
-      if (smtpHost && smtpUser && smtpPass) {
-        transporter = nodemailer.createTransport({
-          host: smtpHost,
-          port: smtpPort,
-          secure: smtpPort === 465,
-          auth: {
-            user: smtpUser,
-            pass: smtpPass,
-          },
-        });
-      } else {
-        // Fallback to test account for preview
-        const testAccount = await nodemailer.createTestAccount();
-        transporter = nodemailer.createTransport({
-          host: "smtp.ethereal.email",
-          port: 587,
-          secure: false,
-          auth: {
-            user: testAccount.user,
-            pass: testAccount.pass,
-          },
-        });
-        console.log("Using Ethereal test email account");
-      }
+    if (smtpHost && smtpUser && smtpPass) {
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpPort === 465,
+        auth: {
+          user: smtpUser,
+          pass: smtpPass,
+        },
+      });
 
       const mailOptions = {
-        from: `"أسعار الذهب" <${smtpUser || 'noreply@example.com'}>`,
+        from: `"أسعار الذهب" <${smtpUser}>`,
         to: emails.join(','),
         subject: title,
         text: message,
@@ -367,13 +348,14 @@ app.post("/api/admin/notifications", authenticate, async (req, res) => {
                </div>`,
       };
 
-      const info = await transporter.sendMail(mailOptions);
-      console.log("Message sent: %s", info.messageId);
-      if (!smtpHost) {
-        console.log("Preview URL: %s", nodemailer.getTestMessageUrl(info));
-      }
-    } catch (error) {
-      console.error("Email sending error:", error);
+      // Send asynchronously without awaiting
+      transporter.sendMail(mailOptions).then(info => {
+        console.log("Email sent successfully: %s", info.messageId);
+      }).catch(error => {
+        console.error("Email sending error:", error);
+      });
+    } else {
+      console.log("SMTP not configured. Skipping email sending.");
     }
   }
 

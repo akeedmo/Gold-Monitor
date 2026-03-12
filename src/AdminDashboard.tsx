@@ -483,7 +483,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                     <div key={n.id} className="p-4 bg-white/5 rounded-xl border border-white/10">
                       <h4 className="font-bold text-sm mb-1 text-white">{n.title}</h4>
                       <p className="text-xs text-gray-400 mb-2">{n.message}</p>
-                      <span className="text-[10px] text-gray-500">{new Date(n.sent_at).toLocaleString(locale)}</span>
+                      <span className="text-[10px] text-gray-500">{new Date(n.sent_at.replace(' ', 'T') + 'Z').toLocaleString(locale)}</span>
                     </div>
                   ))}
                 </div>
