@@ -831,7 +831,7 @@ function AppContent() {
       setPrices(formattedPrices);
 
       const history = historyData.map((h: any) => ({
-        timestamp: h.timestamp,
+        timestamp: h.timestamp ? h.timestamp.replace(' ', 'T') + 'Z' : new Date().toISOString(),
         value: h.price_24k * rate
       })).reverse();
       setChartData(history);

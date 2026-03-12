@@ -117,9 +117,9 @@ export const translations: Translations = {
     tr: "abone seçildi"
   },
   "no_subscribers_selected": {
-    ar: "سيتم الإرسال كتنبيه عام فقط",
-    en: "Will be sent as general alert only",
-    tr: "Sadece genel uyarı olarak gönderilecek"
+    ar: "سيتم الإرسال لجميع المشتركين",
+    en: "Will be sent to all subscribers",
+    tr: "Tüm abonelere gönderilecek"
   },
   "subscribe_alerts": {
     ar: "اشترك في تنبيهات الأسعار",

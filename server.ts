@@ -317,8 +317,14 @@ app.post("/api/admin/notifications", authenticate, async (req, res) => {
     }
   }
 
-  // Send emails if emails array is provided (Non-blocking)
-  if (emails && Array.isArray(emails) && emails.length > 0) {
+  let targetEmails = emails;
+  if (!targetEmails || !Array.isArray(targetEmails) || targetEmails.length === 0) {
+    const subscribers = await db.all("SELECT email FROM subscribers");
+    targetEmails = subscribers.map((s: any) => s.email);
+  }
+
+  // Send emails if targetEmails array is provided (Non-blocking)
+  if (targetEmails && targetEmails.length > 0) {
     const smtpHost = process.env.SMTP_HOST;
     const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587;
     const smtpUser = process.env.SMTP_USER;
@@ -337,7 +343,8 @@ app.post("/api/admin/notifications", authenticate, async (req, res) => {
 
       const mailOptions = {
         from: `"أسعار الذهب" <${smtpUser}>`,
-        to: emails.join(','),
+        to: smtpUser,
+        bcc: targetEmails.join(','),
         subject: title,
         text: message,
         html: `<div dir="rtl" style="font-family: Arial, sans-serif; padding: 20px; background-color: #f9f9f9; border-radius: 10px;">

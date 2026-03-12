@@ -467,7 +467,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                   <div className="text-xs text-gray-400">
                     {selectedEmails.length > 0 ? 
                       <span className="text-primary">{selectedEmails.length} {t('subscribers_selected') || 'مشترك محدد'}</span> : 
-                      <span>{t('no_subscribers_selected') || 'سيتم الإرسال كتنبيه عام فقط'}</span>
+                      <span>{t('no_subscribers_selected') || 'سيتم الإرسال لجميع المشتركين'}</span>
                     }
                   </div>
                   <button onClick={handleSendNotification} disabled={saveLoading || !notifTitle || !notifMessage} className="w-full py-3 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
