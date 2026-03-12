@@ -19,8 +19,11 @@ import {
   Mail,
   Layout,
   Settings,
-  Eye
+  Eye,
+  Heart,
+  Languages
 } from 'lucide-react';
+import { GoogleGenAI } from "@google/genai";
 import { 
   XAxis, 
   YAxis, 
@@ -37,6 +40,7 @@ import axios from 'axios';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Helmet, HelmetProvider } from 'react-helmet-async';
 import AdminDashboard from './AdminDashboard';
+import { useTranslation } from './i18n';
 
 // --- Types ---
 interface GoldPrice {
@@ -64,12 +68,14 @@ interface NewsItem {
 // --- Components ---
 
 const TickerBar = ({ prices, currency }: { prices: GoldPrice[], currency: string }) => {
+  const { language } = useTranslation();
+  const locale = language === 'ar' ? 'ar-SA' : language === 'tr' ? 'tr-TR' : 'en-US';
   return (
     <div className="bg-[#050505] text-primary py-2 overflow-hidden whitespace-nowrap border-b border-gold/20">
       <div className="flex gap-12 items-center ticker-animation">
         {[...prices, ...prices, ...prices, ...prices].map((item, idx) => (
           <div key={`${item.id}-${idx}`} className="flex items-center gap-3">
-            <span className="font-bold text-sm">{item.type} - {item.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency}</span>
+            <span className="font-bold text-sm">{item.type} - {item.price.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency}</span>
             <span className={`text-xs ${item.change >= 0 ? "text-up" : "text-down"}`}>
               {item.change >= 0 ? '▲' : '▼'} {Math.abs(item.changePercent).toFixed(2)}%
             </span>
@@ -81,6 +87,7 @@ const TickerBar = ({ prices, currency }: { prices: GoldPrice[], currency: string
 };
 
 const AdPlaceholder = ({ type }: { type: 'header' | 'sidebar' | 'content' }) => {
+  const { t } = useTranslation();
   const [settings, setSettings] = useState<any>({});
   useEffect(() => {
     axios.get('/api/settings').then(res => setSettings(res.data));
@@ -93,29 +100,101 @@ const AdPlaceholder = ({ type }: { type: 'header' | 'sidebar' | 'content' }) => 
 
   return (
     <div className={`bg-gray-100 border border-dashed border-gray-300 rounded-xl flex items-center justify-center text-gray-400 text-[10px] font-bold uppercase tracking-widest my-4 ${type === 'sidebar' ? 'h-64' : 'h-24 w-full'}`}>
-      إعلان {type === 'header' ? 'الهيدر' : type === 'sidebar' ? 'جانبي' : 'وسط المحتوى'}
+      {t(`ad_${type}`)}
     </div>
   );
 };
 
-const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate, setCurrency, calcAmount, setCalcAmount, calcType, setCalcType }: any) => {
+const NewsCard = (props: any) => {
+  const { item, locale } = props;
+  const [liked, setLiked] = useState(false);
+  const [content, setContent] = useState(item.contentSnippet);
+  const [translating, setTranslating] = useState(false);
+
+  const handleTranslate = async () => {
+    setTranslating(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Translate the following text to ${navigator.language}: "${item.contentSnippet}"`,
+      });
+      if (response.text) setContent(response.text);
+    } catch (error) {
+      console.error("Translation failed", error);
+    } finally {
+      setTranslating(false);
+    }
+  };
+
+  return (
+    <div className="bg-card p-5 rounded-2xl border border-gold/10 card-shadow hover:border-primary/30 transition-all group">
+      <div className="flex justify-between items-start mb-3">
+        <span className="text-[10px] font-bold text-primary uppercase bg-primary/10 px-2 py-1 rounded">{item.source}</span>
+        <span className="text-[10px] text-gray-500">{new Date(item.pubDate).toLocaleDateString(locale)}</span>
+      </div>
+      <a href={item.link} target="_blank" rel="noopener noreferrer">
+        <h4 className="text-white font-bold mb-2 line-clamp-2 group-hover:text-primary transition-colors">{item.title}</h4>
+        <p className="text-gray-500 text-xs line-clamp-2 leading-relaxed mb-4">{content}</p>
+      </a>
+      <div className="flex gap-2">
+        <button onClick={() => setLiked(!liked)} className={`p-2 rounded-lg transition-colors ${liked ? 'text-red-500 bg-red-500/10' : 'text-gray-500 hover:bg-white/5'}`}>
+          <Heart size={18} fill={liked ? "currentColor" : "none"} />
+        </button>
+        <button onClick={handleTranslate} disabled={translating} className="p-2 text-gray-500 hover:bg-white/5 rounded-lg transition-colors">
+          {translating ? <RefreshCw size={18} className="animate-spin" /> : <Languages size={18} />}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate, setCurrency, setLanguage, calcAmount, setCalcAmount, calcType, setCalcType }: any) => {
+  const { t, language } = useTranslation();
+  const locale = language === 'ar' ? 'ar-SA' : language === 'tr' ? 'tr-TR' : 'en-US';
+  const [email, setEmail] = useState('');
+  const [subLoading, setSubLoading] = useState(false);
+
+  const handleSubscribe = async () => {
+    setSubLoading(true);
+    try {
+      await axios.post('/api/subscribe', { email });
+      alert(t('subscribed_successfully'));
+    } catch (error) {
+      console.error("Subscription failed", error);
+    } finally {
+      setSubLoading(false);
+    }
+  };
   return (
     <div className="space-y-8 pb-24 md:pb-8">
       <Helmet>
-        <title>أسعار الذهب المباشرة | مراقب الذهب</title>
-        <meta name="description" content="تابع أسعار الذهب العالمية والمحلية لحظة بلحظة مع رسوم بيانية تفاعلية وأحدث الأخبار الاقتصادية." />
-        <meta name="keywords" content="أسعار الذهب اليوم, سعر الذهب مباشر, الذهب في السعودية, الذهب في الإمارات, الذهب في الكويت, الذهب في قطر, الذهب في البحرين, الذهب في عمان, حاسبة الذهب, اخبار الذهب اليوم" />
+        <title>{t('site_title')}</title>
+        <meta name="description" content={t('meta_desc_home')} />
+        <meta name="keywords" content={t('meta_keywords_home')} />
+        <meta property="og:title" content={t('site_title')} />
+        <meta property="og:description" content={t('meta_desc_home')} />
       </Helmet>
 
       {/* Welcome */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-bold gold-text-gradient">نظرة عامة على السوق</h2>
-          <p className="text-sm text-gray-500 mt-1">آخر تحديث: {lastUpdate.toLocaleTimeString()}</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 bg-white/5 px-3 py-2 rounded-lg border border-gold/20">
+            <Languages size={14} className="text-primary" />
+            <select value={language} onChange={(e) => setLanguage(e.target.value as any)} className="bg-transparent text-sm font-bold text-white focus:outline-none cursor-pointer">
+              <option value="ar" className="bg-card">العربية</option>
+              <option value="en" className="bg-card">English</option>
+              <option value="tr" className="bg-card">Türkçe</option>
+            </select>
+          </div>
+        </div>
+        <div className="flex flex-col md:items-end">
+          <h2 className="text-3xl font-bold gold-text-gradient">{t('market_overview')}</h2>
+          <p className="text-sm text-gray-500 mt-1">{t('last_update')} {lastUpdate.toLocaleTimeString(locale)}</p>
         </div>
         <div className="flex items-center gap-2 text-xs font-bold text-up bg-up/10 px-3 py-1.5 rounded-full">
           <div className="w-2 h-2 rounded-full bg-up animate-pulse" />
-          السوق مباشر
+          {t('live_market')}
         </div>
       </div>
 
@@ -134,7 +213,7 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
             <h3 className="text-gray-500 text-xs font-bold mb-1">{item.type}</h3>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-bold text-white">
-                {item.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {item.price.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
               <span className="text-primary text-xs font-bold">{currency}</span>
             </div>
@@ -151,20 +230,13 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
           <div className="flex justify-between items-center">
             <h3 className="text-xl font-bold flex items-center gap-3">
               <Newspaper className="text-primary" />
-              أحدث الأخبار الاقتصادية
+              {t('latest_news')}
             </h3>
-            <Link to="/news" className="text-xs font-bold text-primary hover:underline">عرض جميع الأخبار</Link>
+            <Link to="/news" className="text-xs font-bold text-primary hover:underline">{t('view_all_news')}</Link>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {news.slice(0, 4).map((item: any) => (
-              <a key={item.id} href={item.link} target="_blank" rel="noopener noreferrer" className="bg-card p-5 rounded-2xl border border-gold/10 card-shadow hover:border-primary/30 transition-all group">
-                <div className="flex justify-between items-start mb-3">
-                  <span className="text-[10px] font-bold text-primary uppercase bg-primary/10 px-2 py-1 rounded">{item.source}</span>
-                  <span className="text-[10px] text-gray-500">{new Date(item.pubDate).toLocaleDateString()}</span>
-                </div>
-                <h4 className="text-white font-bold mb-2 line-clamp-2 group-hover:text-primary transition-colors">{item.title}</h4>
-                <p className="text-gray-500 text-xs line-clamp-2 leading-relaxed">{item.contentSnippet}</p>
-              </a>
+              <NewsCard key={item.id} item={item} locale={locale} />
             ))}
           </div>
         </div>
@@ -173,19 +245,21 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
       {/* Subscribe to Alerts */}
       <div className="bg-gradient-to-r from-gold/20 to-primary/10 rounded-3xl p-8 border border-gold/20 relative overflow-hidden mt-12">
         <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full -mr-32 -mt-32 blur-3xl" />
-        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
-          <div className="text-center md:text-right">
-            <h3 className="text-2xl font-bold mb-2">اشترك في تنبيهات الأسعار</h3>
-            <p className="text-gray-400 text-sm">كن أول من يعلم عند تغير أسعار الذهب بشكل ملحوظ في السوق العالمي.</p>
+        <div className="relative z-10 flex flex-col items-center text-center gap-6">
+          <div className="text-center">
+            <h3 className="text-2xl font-bold mb-2">{t('subscribe_alerts')}</h3>
+            <p className="text-gray-400 text-sm">{t('subscribe_desc')}</p>
           </div>
-          <div className="flex w-full md:w-auto gap-2">
+          <div className="flex flex-col w-full md:w-80 gap-3">
             <input 
               type="email" 
-              placeholder="بريدك الإلكتروني" 
-              className="flex-1 md:w-64 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition-all text-white"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder={t('email_placeholder')} 
+              className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition-all text-white"
             />
-            <button className="bg-primary text-black px-6 py-3 rounded-xl font-bold text-sm hover:bg-primary/80 transition-all shadow-lg shadow-primary/20 whitespace-nowrap">
-              اشترك الآن
+            <button onClick={handleSubscribe} disabled={subLoading} className="w-full bg-primary text-black px-6 py-3 rounded-xl font-bold text-sm hover:bg-primary/80 transition-all shadow-lg shadow-primary/20">
+              {subLoading ? <RefreshCw className="animate-spin mx-auto" size={18} /> : t('subscribe_now')}
             </button>
           </div>
         </div>
@@ -195,6 +269,8 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
 };
 
 const ChartsPage = ({ chartData, currency }: any) => {
+  const { t, language } = useTranslation();
+  const locale = language === 'ar' ? 'ar-SA' : language === 'tr' ? 'tr-TR' : 'en-US';
   const [timeRange, setTimeRange] = useState('D1');
   const [isChanging, setIsChanging] = useState(false);
   const [selectedPoint, setSelectedPoint] = useState<any>(null);
@@ -208,9 +284,9 @@ const ChartsPage = ({ chartData, currency }: any) => {
   const formatXAxis = (tickItem: any) => {
     const date = new Date(tickItem);
     if (timeRange === 'H1' || timeRange === 'H2' || timeRange === 'D1') {
-      return date.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+      return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
     }
-    return date.toLocaleDateString('ar-SA', { month: 'short', day: 'numeric' });
+    return date.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
   };
 
   // Filter data based on range (simulated)
@@ -224,11 +300,11 @@ const ChartsPage = ({ chartData, currency }: any) => {
   return (
     <div className="space-y-8">
       <Helmet>
-        <title>الرسوم البيانية | أسعار الذهب المباشرة</title>
-        <meta name="description" content="تحليل تقني ورسوم بيانية تفاعلية لأسعار الذهب العالمية والمحلية." />
+        <title>{t('charts_analysis')}</title>
+        <meta name="description" content={t('meta_desc_charts')} />
       </Helmet>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <h2 className="text-3xl font-bold gold-text-gradient">الرسوم البيانية والتحليلات</h2>
+        <h2 className="text-3xl font-bold gold-text-gradient">{t('charts_analysis')}</h2>
         <div className="flex bg-[#161a1e] p-1 rounded-lg border border-white/5">
           {['H1', 'H2', 'D1', 'M1', 'Y1'].map((range) => (
             <button
@@ -304,7 +380,7 @@ const ChartsPage = ({ chartData, currency }: any) => {
                 tickLine={false} 
                 axisLine={false} 
                 domain={['auto', 'auto']} 
-                tickFormatter={(val) => val.toLocaleString()}
+                tickFormatter={(val) => val.toLocaleString(locale)}
               />
               <Tooltip 
                 content={({ active, payload }: any) => {
@@ -312,9 +388,9 @@ const ChartsPage = ({ chartData, currency }: any) => {
                     const date = new Date(payload[0].payload.timestamp);
                     return (
                       <div className="bg-[#1e2329] border border-[#474d57] p-3 rounded shadow-2xl text-right text-[11px]">
-                        <p className="text-white font-bold mb-1">السعر: <span className="text-primary">{payload[0].value.toLocaleString(undefined, { minimumFractionDigits: 2 })} {currency}</span></p>
-                        <p className="text-gray-400">التاريخ: {date.toLocaleDateString('ar-SA')}</p>
-                        <p className="text-gray-400">الوقت: {date.toLocaleTimeString('ar-SA')}</p>
+                        <p className="text-white font-bold mb-1">{t('price')} <span className="text-primary">{payload[0].value.toLocaleString(locale, { minimumFractionDigits: 2 })} {currency}</span></p>
+                        <p className="text-gray-400">{t('date')} {date.toLocaleDateString(locale)}</p>
+                        <p className="text-gray-400">{t('time')} {date.toLocaleTimeString(locale)}</p>
                       </div>
                     );
                   }
@@ -342,16 +418,16 @@ const ChartsPage = ({ chartData, currency }: any) => {
             className="mt-6 p-4 bg-white/5 rounded-2xl border border-gold/20 flex justify-between items-center"
           >
             <div className="flex flex-col">
-              <span className="text-[10px] text-gray-500 font-bold uppercase">السعر المختار</span>
-              <span className="text-xl font-bold text-primary">{selectedPoint.value.toLocaleString()} {currency}</span>
+              <span className="text-[10px] text-gray-500 font-bold uppercase">{t('selected_price')}</span>
+              <span className="text-xl font-bold text-primary">{selectedPoint.value.toLocaleString(locale)} {currency}</span>
             </div>
             <div className="text-right">
-              <span className="text-[10px] text-gray-500 font-bold uppercase">التاريخ والوقت</span>
+              <span className="text-[10px] text-gray-500 font-bold uppercase">{t('date_and_time')}</span>
               <p className="text-sm font-bold text-white">
-                {new Date(selectedPoint.timestamp).toLocaleDateString('ar-SA', { weekday: 'long', day: 'numeric', month: 'long' })}
+                {new Date(selectedPoint.timestamp).toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' })}
               </p>
               <p className="text-xs text-gray-400">
-                {new Date(selectedPoint.timestamp).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}
+                {new Date(selectedPoint.timestamp).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
               </p>
             </div>
           </motion.div>
@@ -359,13 +435,13 @@ const ChartsPage = ({ chartData, currency }: any) => {
 
         <div className="mt-6 flex justify-between items-center text-[10px] text-gray-500 font-bold uppercase tracking-widest">
           <div className="flex items-center gap-4">
-            <span>مباشر من البورصة العالمية</span>
+            <span>{t('live_from_exchange')}</span>
             <span className="text-primary/40">|</span>
-            <span>النطاق: {timeRange}</span>
+            <span>{t('range')} {timeRange}</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-up animate-pulse" />
-            <span>محدث الآن</span>
+            <span>{t('updated_now')}</span>
           </div>
         </div>
       </div>
@@ -374,6 +450,8 @@ const ChartsPage = ({ chartData, currency }: any) => {
 };
 
 const NewsPage = ({ news }: any) => {
+  const { t, language } = useTranslation();
+  const locale = language === 'ar' ? 'ar-SA' : language === 'tr' ? 'tr-TR' : 'en-US';
   const [newsList, setNewsList] = useState(news);
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
@@ -406,16 +484,16 @@ const NewsPage = ({ news }: any) => {
   return (
     <div className="space-y-8">
       <Helmet>
-        <title>أخبار الذهب | مراقب الذهب</title>
-        <meta name="description" content="تغطية شاملة لأحدث أخبار الذهب والأسواق المالية العالمية." />
+        <title>{t('gold_news_markets')}</title>
+        <meta name="description" content={t('meta_desc_news')} />
       </Helmet>
-      <h2 className="text-3xl font-bold gold-text-gradient">أخبار الذهب والأسواق</h2>
+      <h2 className="text-3xl font-bold gold-text-gradient">{t('gold_news_markets')}</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {newsList.map((item: any) => (
           <div key={item.id} className="bg-card p-6 rounded-3xl border border-gold/10 card-shadow hover:border-primary/30 transition-all group flex flex-col">
             <div className="flex justify-between items-start mb-4">
               <span className="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full">{item.source}</span>
-              <span className="text-xs text-gray-500">{new Date(item.pubDate).toLocaleDateString()}</span>
+              <span className="text-xs text-gray-500">{new Date(item.pubDate).toLocaleDateString(locale)}</span>
             </div>
             <h4 className="text-lg font-bold mb-3 group-hover:text-primary transition-colors">{item.title}</h4>
             <div className={`text-gray-500 text-sm leading-relaxed mb-4 ${expandedId === item.id ? '' : 'line-clamp-3'}`}>
@@ -446,7 +524,7 @@ const NewsPage = ({ news }: any) => {
                       }}
                       className="text-primary text-xs font-bold hover:underline"
                     >
-                      {expandedId === item.id ? 'إغلاق' : 'اقرأ المزيد'}
+                      {expandedId === item.id ? t('close') : t('read_more')}
                     </button>
                   )}
                   <a 
@@ -455,7 +533,7 @@ const NewsPage = ({ news }: any) => {
                     rel="noopener noreferrer" 
                     onClick={() => handleView(item.id)}
                     className="p-1.5 bg-white/5 rounded-lg text-gray-400 hover:text-primary transition-colors"
-                    title="المصدر الأصلي"
+                    title={t('original_source')}
                   >
                     <Globe size={14} />
                   </a>
@@ -469,71 +547,79 @@ const NewsPage = ({ news }: any) => {
   );
 };
 
-const TipsPage = () => (
-  <div className="space-y-8">
-    <Helmet>
-      <title>نصائح الاستثمار | مراقب الذهب</title>
-      <meta name="description" content="دليلك الشامل للاستثمار في الذهب وكيفية الحفاظ على قيمة مدخراتك." />
-    </Helmet>
-    <h2 className="text-3xl font-bold gold-text-gradient">نصائح الاستثمار في الذهب</h2>
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-      {[
-        { title: 'لماذا الذهب؟', content: 'يعتبر الذهب ملاذاً آمناً في أوقات الأزمات الاقتصادية والتضخم.', icon: Lightbulb },
-        { title: 'أفضل وقت للشراء', content: 'الشراء التدريجي (متوسط التكلفة) هو أفضل استراتيجية للمستثمر طويل الأمد.', icon: Clock },
-        { title: 'السبائك أم المشغولات؟', content: 'السبائك والعملات الذهبية أفضل للاستثمار لقلة المصنعية مقارنة بالمشغولات.', icon: Coins },
-        { title: 'التنويع', content: 'لا تضع كل مدخراتك في الذهب؛ اجعل الذهب جزءاً من محفظة استثمارية متنوعة.', icon: Globe },
-      ].map((tip, idx) => (
-        <div key={idx} className="bg-card p-8 rounded-3xl border border-gold/10 card-shadow flex gap-6">
-          <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center text-primary shrink-0">
-            <tip.icon size={28} />
+const TipsPage = () => {
+  const { t } = useTranslation();
+  return (
+    <div className="space-y-8">
+      <Helmet>
+        <title>{t('investment_tips')}</title>
+        <meta name="description" content={t('meta_desc_tips')} />
+      </Helmet>
+      <h2 className="text-3xl font-bold gold-text-gradient">{t('investment_tips')}</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {[
+          { title: t('tip_1_title'), content: t('tip_1_desc'), icon: Lightbulb },
+          { title: t('tip_2_title'), content: t('tip_2_desc'), icon: Clock },
+          { title: t('tip_3_title'), content: t('tip_3_desc'), icon: Coins },
+          { title: t('tip_4_title'), content: t('tip_4_desc'), icon: Globe },
+        ].map((tip, idx) => (
+          <div key={idx} className="bg-card p-8 rounded-3xl border border-gold/10 card-shadow flex gap-6">
+            <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center text-primary shrink-0">
+              <tip.icon size={28} />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold mb-2">{tip.title}</h3>
+              <p className="text-gray-500 leading-relaxed">{tip.content}</p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-xl font-bold mb-2">{tip.title}</h3>
-            <p className="text-gray-500 leading-relaxed">{tip.content}</p>
-          </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
-const AboutPage = () => (
-  <div className="space-y-8 max-w-3xl mx-auto">
-    <Helmet>
-      <title>عن الموقع | مراقب الذهب</title>
-      <meta name="description" content="تعرف على منصة مراقب الذهب وأهدافنا في تقديم أدق البيانات المالية." />
-    </Helmet>
-    <div className="bg-card p-12 rounded-3xl border border-gold/10 card-shadow text-center space-y-6">
-      <div className="w-20 h-20 gold-gradient rounded-3xl flex items-center justify-center text-black mx-auto shadow-xl">
-        <Coins size={40} />
-      </div>
-      <h2 className="text-3xl font-bold gold-text-gradient">عن مراقب الذهب</h2>
-      <p className="text-gray-400 leading-relaxed text-lg">
-        منصة "مراقب الذهب" هي وجهتك الأولى لمتابعة أسعار الذهب العالمية والمحلية لحظة بلحظة. نهدف إلى تقديم بيانات دقيقة وموثوقة للمستثمرين والمهتمين بسوق الذهب، مع توفير أدوات تحليلية وأخبار اقتصادية شاملة.
-      </p>
-      <div className="flex flex-col items-center gap-2 text-primary">
-        <Mail size={20} />
-        <span className="text-sm font-bold">qydalrfyd@gmail.com</span>
-      </div>
-      <div className="pt-8 grid grid-cols-3 gap-4">
-        <div className="p-4 bg-white/5 rounded-2xl">
-          <h4 className="font-bold text-primary text-xl">24/7</h4>
-          <p className="text-[10px] text-gray-500 uppercase font-bold">تحديث مباشر</p>
+const AboutPage = () => {
+  const { t } = useTranslation();
+  return (
+    <div className="space-y-8 max-w-3xl mx-auto">
+      <Helmet>
+        <title>{t('about_title')}</title>
+        <meta name="description" content={t('meta_desc_about')} />
+      </Helmet>
+      <div className="bg-card p-12 rounded-3xl border border-gold/10 card-shadow text-center space-y-6">
+        <div className="w-20 h-20 gold-gradient rounded-3xl flex items-center justify-center text-black mx-auto shadow-xl">
+          <Coins size={40} />
         </div>
-        <div className="p-4 bg-white/5 rounded-2xl">
-          <h4 className="font-bold text-primary text-xl">100%</h4>
-          <p className="text-[10px] text-gray-500 uppercase font-bold">دقة البيانات</p>
+        <h2 className="text-3xl font-bold gold-text-gradient">{t('about_title')}</h2>
+        <p className="text-gray-400 leading-relaxed text-lg">
+          {t('about_desc')}
+        </p>
+        <div className="flex flex-col items-center gap-2 text-primary">
+          <Mail size={20} />
+          <span className="text-sm font-bold">qydalrfyd@gmail.com</span>
         </div>
-        <div className="p-4 bg-white/5 rounded-2xl">
-          <h4 className="font-bold text-primary text-xl">Free</h4>
-          <p className="text-[10px] text-gray-500 uppercase font-bold">خدمة مجانية</p>
+        <div className="pt-8 grid grid-cols-3 gap-4">
+          <div className="p-4 bg-white/5 rounded-2xl">
+            <h4 className="font-bold text-primary text-xl">24/7</h4>
+            <p className="text-[10px] text-gray-500 uppercase font-bold">{t('live_update')}</p>
+          </div>
+          <div className="p-4 bg-white/5 rounded-2xl">
+            <h4 className="font-bold text-primary text-xl">100%</h4>
+            <p className="text-[10px] text-gray-500 uppercase font-bold">{t('data_accuracy')}</p>
+          </div>
+          <div className="p-4 bg-white/5 rounded-2xl">
+            <h4 className="font-bold text-primary text-xl">Free</h4>
+            <p className="text-[10px] text-gray-500 uppercase font-bold">{t('free_service')}</p>
+          </div>
         </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const GoldCalculator = ({ prices, currency, amount, setAmount, type, setType }: any) => {
+  const { t, language } = useTranslation();
+  const locale = language === 'ar' ? 'ar-SA' : language === 'tr' ? 'tr-TR' : 'en-US';
   const selectedPrice = prices.find((p: any) => p.id === type)?.price || 0;
   const total = (Number(amount) || 0) * selectedPrice;
 
@@ -541,11 +627,11 @@ const GoldCalculator = ({ prices, currency, amount, setAmount, type, setType }: 
     <div className="bg-card rounded-2xl p-6 border border-gold/10 card-shadow">
       <h3 className="font-bold mb-4 flex items-center gap-2">
         <Calculator size={18} className="text-primary" />
-        حاسبة الذهب
+        {t('gold_calculator')}
       </h3>
       <div className="space-y-4">
         <div>
-          <label className="text-[10px] text-gray-500 uppercase font-bold mb-1 block">الوزن (جرام)</label>
+          <label className="text-[10px] text-gray-500 uppercase font-bold mb-1 block">{t('weight_grams')}</label>
           <input 
             type="text" 
             inputMode="decimal"
@@ -558,19 +644,19 @@ const GoldCalculator = ({ prices, currency, amount, setAmount, type, setType }: 
               }
             }} 
             className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary transition-colors text-white" 
-            placeholder="أدخل الوزن..."
+            placeholder={t('enter_weight')}
           />
         </div>
         <div>
-          <label className="text-[10px] text-gray-500 uppercase font-bold mb-1 block">العيار</label>
+          <label className="text-[10px] text-gray-500 uppercase font-bold mb-1 block">{t('karat')}</label>
           <select value={type} onChange={(e) => setType(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary transition-colors text-white">
             {prices.map((p: any) => <option key={p.id} value={p.id} className="bg-card">{p.type}</option>)}
           </select>
         </div>
         <div className="pt-4 border-t border-white/10">
           <div className="flex justify-between items-center">
-            <span className="text-xs text-gray-500">القيمة التقديرية</span>
-            <span className="text-lg font-bold text-primary">{total.toLocaleString(undefined, { minimumFractionDigits: 2 })} {currency}</span>
+            <span className="text-xs text-gray-500">{t('estimated_value')}</span>
+            <span className="text-lg font-bold text-primary">{total.toLocaleString(locale, { minimumFractionDigits: 2 })} {currency}</span>
           </div>
         </div>
       </div>
@@ -579,13 +665,14 @@ const GoldCalculator = ({ prices, currency, amount, setAmount, type, setType }: 
 };
 
 const BottomNav = ({ onRefresh }: { onRefresh: () => void }) => {
+  const { t } = useTranslation();
   const location = useLocation();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const navItems = [
-    { id: '/', label: 'الرئيسية', icon: Layout, path: '/' },
-    { id: '/charts', label: 'الرسوم', icon: BarChart2, path: '/charts' },
-    { id: '/news', label: 'الأخبار', icon: Newspaper, path: '/news' },
-    { id: '/tips', label: 'نصائح', icon: Lightbulb, path: '/tips' },
+    { id: '/', label: t('nav_home'), icon: Layout, path: '/' },
+    { id: '/charts', label: t('nav_charts_short'), icon: BarChart2, path: '/charts' },
+    { id: '/news', label: t('nav_news'), icon: Newspaper, path: '/news' },
+    { id: '/tips', label: t('nav_tips'), icon: Lightbulb, path: '/tips' },
   ];
 
   const handleRefresh = async () => {
@@ -614,20 +701,22 @@ const BottomNav = ({ onRefresh }: { onRefresh: () => void }) => {
         className={`flex flex-col items-center gap-1 transition-all active:scale-95 ${isRefreshing ? 'text-primary' : 'text-gray-500 hover:text-primary'}`}
       >
         <RefreshCw size={20} className={isRefreshing ? 'animate-spin' : 'hover:rotate-180 transition-transform duration-500'} />
-        <span className="text-[10px] font-bold">{isRefreshing ? 'تحديث...' : 'تحديث'}</span>
+        <span className="text-[10px] font-bold">{isRefreshing ? t('refreshing') : t('refresh')}</span>
       </button>
     </div>
   );
 };
 
 function AppContent() {
+  const { t, language, setLanguage, isRTL } = useTranslation();
+  const locale = language === 'ar' ? 'ar-SA' : language === 'tr' ? 'tr-TR' : 'en-US';
   const [calcAmount, setCalcAmount] = useState<number | string>(1);
   const [calcType, setCalcType] = useState('24k');
   const [prices, setPrices] = useState<GoldPrice[]>([
-    { id: '24k', type: 'عيار 24', price: 0, change: 0, changePercent: 0 },
-    { id: '22k', type: 'عيار 22', price: 0, change: 0, changePercent: 0 },
-    { id: '21k', type: 'عيار 21', price: 0, change: 0, changePercent: 0 },
-    { id: '18k', type: 'عيار 18', price: 0, change: 0, changePercent: 0 },
+    { id: '24k', type: t('gold_24k'), price: 0, change: 0, changePercent: 0 },
+    { id: '22k', type: t('gold_22k'), price: 0, change: 0, changePercent: 0 },
+    { id: '21k', type: t('gold_21k'), price: 0, change: 0, changePercent: 0 },
+    { id: '18k', type: t('gold_18k'), price: 0, change: 0, changePercent: 0 },
   ]);
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
@@ -698,10 +787,10 @@ function AppContent() {
       };
 
       const formattedPrices: GoldPrice[] = [
-        { id: '24k', type: 'عيار 24', price: (latest.price_24k || 0) * rate, ...calculateChange(latest.price_24k, previous.price_24k) },
-        { id: '22k', type: 'عيار 22', price: (latest.price_22k || 0) * rate, ...calculateChange(latest.price_22k, previous.price_22k) },
-        { id: '21k', type: 'عيار 21', price: (latest.price_21k || 0) * rate, ...calculateChange(latest.price_21k, previous.price_21k) },
-        { id: '18k', type: 'عيار 18', price: (latest.price_18k || 0) * rate, ...calculateChange(latest.price_18k, previous.price_18k) },
+        { id: '24k', type: t('gold_24k'), price: (latest.price_24k || 0) * rate, ...calculateChange(latest.price_24k, previous.price_24k) },
+        { id: '22k', type: t('gold_22k'), price: (latest.price_22k || 0) * rate, ...calculateChange(latest.price_22k, previous.price_22k) },
+        { id: '21k', type: t('gold_21k'), price: (latest.price_21k || 0) * rate, ...calculateChange(latest.price_21k, previous.price_21k) },
+        { id: '18k', type: t('gold_18k'), price: (latest.price_18k || 0) * rate, ...calculateChange(latest.price_18k, previous.price_18k) },
       ];
       setPrices(formattedPrices);
 
@@ -739,7 +828,7 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-bg text-secondary" dir="rtl">
+    <div className="min-h-screen flex flex-col bg-bg text-secondary" dir={isRTL ? "rtl" : "ltr"}>
       <header className="bg-card border-b border-gold/20 px-6 py-4 sticky top-0 z-50 shadow-2xl">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-4">
@@ -748,50 +837,50 @@ function AppContent() {
             </Link>
             <div className="flex flex-col">
               <div className="flex items-center gap-3">
-                <h1 className="text-xl font-bold gold-text-gradient whitespace-nowrap">أسعار الذهب المباشرة</h1>
-                <div className="hidden sm:flex items-center gap-2 bg-white/5 px-2 py-1 rounded-lg border border-gold/20">
-                  <Globe size={12} className="text-primary" />
+                <h1 className="text-xl font-bold gold-text-gradient whitespace-nowrap">{t('site_title')}</h1>
+                <button 
+                  onClick={() => setIsAdmin(true)} 
+                  className="hidden sm:flex p-1.5 bg-white/5 rounded-lg border border-white/10 text-gray-400 hover:text-primary transition-all"
+                  title={t('admin_login')}
+                >
+                  <Settings size={18} />
+                </button>
+                <div className="flex items-center gap-2 bg-white/5 px-2 py-1 rounded-lg border border-gold/20">
+                  <Coins size={12} className="text-primary" />
                   <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="bg-transparent text-[10px] font-bold text-white focus:outline-none cursor-pointer">
                     {Object.keys(exchangeRates).filter(c => !c.startsWith('YER_')).map(code => <option key={code} value={code} className="bg-card">{code}</option>)}
                   </select>
                 </div>
-                <button 
-                  onClick={() => setIsAdmin(true)} 
-                  className="hidden sm:flex p-1.5 bg-white/5 rounded-lg border border-white/10 text-gray-400 hover:text-primary transition-all"
-                  title="دخول المشرف"
-                >
-                  <Settings size={18} />
-                </button>
               </div>
               <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold">
-                <span>{currentTime.toLocaleDateString('ar-SA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                <span>{currentTime.toLocaleDateString(locale, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
                 <span className="text-primary">•</span>
-                <span>{currentTime.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                <span>{currentTime.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
               </div>
             </div>
           </div>
 
-          <div className="hidden md:flex items-center gap-6">
+          <div className="hidden md:flex items-center gap-4">
             <nav className="flex gap-6 text-sm font-semibold">
-              <Link to="/" className={location.pathname === '/' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>الرئيسية</Link>
-              <Link to="/charts" className={location.pathname === '/charts' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>الرسوم البيانية</Link>
-              <Link to="/news" className={location.pathname === '/news' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>الأخبار</Link>
-              <Link to="/tips" className={location.pathname === '/tips' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>نصائح</Link>
-              <Link to="/about" className={location.pathname === '/about' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>عن الموقع</Link>
+              <Link to="/" className={location.pathname === '/' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_home')}</Link>
+              <Link to="/charts" className={location.pathname === '/charts' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_charts')}</Link>
+              <Link to="/news" className={location.pathname === '/news' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_news')}</Link>
+              <Link to="/tips" className={location.pathname === '/tips' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_tips')}</Link>
+              <Link to="/about" className={location.pathname === '/about' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_about')}</Link>
             </nav>
             <div className="h-4 w-[1px] bg-white/10" />
             <button className="p-2 text-gray-400 hover:text-primary transition-colors">
               <Bell size={20} />
             </button>
+            <button 
+              onClick={() => setIsMenuOpen(!isMenuOpen)} 
+              className="p-2 text-gray-400 hover:text-primary transition-colors"
+            >
+              <Menu size={24} />
+            </button>
           </div>
 
           <div className="flex items-center gap-2 md:hidden">
-            <div className="flex items-center gap-2 bg-white/5 px-2 py-1 rounded-lg border border-gold/20">
-              <Globe size={12} className="text-primary" />
-              <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="bg-transparent text-[10px] font-bold text-white focus:outline-none cursor-pointer">
-                {Object.keys(exchangeRates).filter(c => !c.startsWith('YER_')).map(code => <option key={code} value={code} className="bg-card">{code}</option>)}
-              </select>
-            </div>
             <button 
               onClick={() => setIsMenuOpen(!isMenuOpen)} 
               className="p-2 text-gray-400 hover:text-primary transition-colors"
@@ -811,17 +900,17 @@ function AppContent() {
               className="md:hidden overflow-hidden bg-card border-t border-white/5 mt-4"
             >
               <nav className="flex flex-col p-4 gap-4 text-sm font-bold">
-                <Link to="/" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">الرئيسية</Link>
-                <Link to="/charts" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">الرسوم البيانية</Link>
-                <Link to="/news" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">الأخبار</Link>
-                <Link to="/tips" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">نصائح</Link>
-                <Link to="/about" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">عن الموقع</Link>
+                <Link to="/" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_home')}</Link>
+                <Link to="/charts" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_charts')}</Link>
+                <Link to="/news" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_news')}</Link>
+                <Link to="/tips" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_tips')}</Link>
+                <Link to="/about" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_about')}</Link>
                 <button 
                   onClick={() => { setIsAdmin(true); setIsMenuOpen(false); }} 
                   className="flex items-center gap-2 text-primary pt-4 border-t border-white/5"
                 >
                   <Settings size={18} />
-                  <span>إعدادات المشرف</span>
+                  <span>{t('admin_settings')}</span>
                 </button>
               </nav>
             </motion.div>
@@ -839,8 +928,8 @@ function AppContent() {
                 <Globe size={20} />
               </div>
               <div>
-                <h3 className="font-bold text-white">تخصيص المنطقة (اليمن)</h3>
-                <p className="text-xs text-gray-500">اختر المنطقة لعرض الأسعار المحلية بدقة حسب السوق</p>
+                <h3 className="font-bold text-white">{t('yemen_region_customization')}</h3>
+                <p className="text-xs text-gray-500">{t('choose_region_desc')}</p>
               </div>
             </div>
             <div className="flex p-1 bg-white/5 rounded-xl border border-white/10 w-full sm:w-auto">
@@ -848,13 +937,13 @@ function AppContent() {
                 onClick={() => setYemenRegion('SANAA')}
                 className={`flex-1 sm:px-10 py-2.5 rounded-lg font-bold transition-all duration-300 ${yemenRegion === 'SANAA' ? 'gold-gradient text-black shadow-lg' : 'text-gray-400 hover:text-white'}`}
               >
-                صنعاء
+                {t('sanaa')}
               </button>
               <button 
                 onClick={() => setYemenRegion('ADEN')}
                 className={`flex-1 sm:px-10 py-2.5 rounded-lg font-bold transition-all duration-300 ${yemenRegion === 'ADEN' ? 'gold-gradient text-black shadow-lg' : 'text-gray-400 hover:text-white'}`}
               >
-                عدن
+                {t('aden')}
               </button>
             </div>
           </div>
@@ -868,15 +957,15 @@ function AppContent() {
               <div className="w-8 h-8 gold-gradient rounded-full flex items-center justify-center text-black">
                 <Info size={16} />
               </div>
-              <span className="text-sm font-bold">أنت مسجل دخول كمسؤول</span>
+              <span className="text-sm font-bold">{t('logged_in_as_admin')}</span>
             </div>
             <button onClick={() => setIsAdmin(true)} className="px-4 py-2 bg-primary text-black rounded-lg text-xs font-bold hover:bg-primary/80 transition-all">
-              فتح لوحة التحكم
+              {t('open_dashboard')}
             </button>
           </div>
         )}
         <Routes>
-          <Route path="/" element={<HomePage prices={prices} chartData={chartData} news={news} currency={currency} exchangeRates={exchangeRates} lastUpdate={lastUpdate} setCurrency={setCurrency} calcAmount={calcAmount} setCalcAmount={setCalcAmount} calcType={calcType} setCalcType={setCalcType} />} />
+          <Route path="/" element={<HomePage prices={prices} chartData={chartData} news={news} currency={currency} exchangeRates={exchangeRates} lastUpdate={lastUpdate} setCurrency={setCurrency} setLanguage={setLanguage} calcAmount={calcAmount} setCalcAmount={setCalcAmount} calcType={calcType} setCalcType={setCalcType} />} />
           <Route path="/charts" element={<ChartsPage chartData={chartData} currency={currency} />} />
           <Route path="/news" element={<NewsPage news={news} />} />
           <Route path="/tips" element={<TipsPage />} />
@@ -891,9 +980,9 @@ function AppContent() {
           <div className="flex flex-col items-center gap-4">
             <div className="flex items-center gap-2 text-primary">
               <Coins size={32} />
-              <span className="text-2xl font-bold gold-text-gradient">أسعار الذهب المباشرة</span>
+              <span className="text-2xl font-bold gold-text-gradient">{t('site_title')}</span>
             </div>
-            <p className="text-gray-500 text-sm max-w-md mx-auto">أدق منصة لمتابعة أسعار الذهب العالمية والمحلية لحظة بلحظة مع تحليلات فنية شاملة.</p>
+            <p className="text-gray-500 text-sm max-w-md mx-auto">{t('footer_desc')}</p>
             <div className="flex items-center gap-2 text-primary text-sm font-bold">
               <Mail size={16} />
               <span>qydalrfyd@gmail.com</span>
@@ -901,9 +990,9 @@ function AppContent() {
           </div>
           
           <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-gray-500 text-xs font-bold">
-            <span>جميع الحقوق محفوظة © 2026 أسعار الذهب المباشرة</span>
+            <span>{t('all_rights_reserved')} {t('site_title')}</span>
             {isLoggedIn && (
-              <button onClick={() => { localStorage.removeItem('admin_token'); window.location.reload(); }} className="hover:text-red-500 transition-colors">تسجيل الخروج</button>
+              <button onClick={() => { localStorage.removeItem('admin_token'); window.location.reload(); }} className="hover:text-red-500 transition-colors">{t('logout')}</button>
             )}
           </div>
         </div>
