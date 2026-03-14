@@ -757,6 +757,23 @@ const BottomNav = ({ onRefresh }: { onRefresh: () => void }) => {
   );
 };
 
+const LiveClock = ({ locale }: { locale: string }) => {
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold">
+      <span>{currentTime.toLocaleDateString(locale, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+      <span className="text-primary">•</span>
+      <span>{currentTime.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+    </div>
+  );
+};
+
 function AppContent() {
   const { t, language, setLanguage, isRTL } = useTranslation();
   const locale = language === 'ar' ? 'ar-SA' : language === 'tr' ? 'tr-TR' : 'en-US';
@@ -774,17 +791,11 @@ function AppContent() {
   const [yemenRegion, setYemenRegion] = useState(localStorage.getItem('yemenRegion') || 'ADEN');
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({ USD: 1 });
   const [lastUpdate, setLastUpdate] = useState(new Date());
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('admin_token'));
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const location = useLocation();
-
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     setIsLoggedIn(!!localStorage.getItem('admin_token'));
@@ -915,11 +926,7 @@ function AppContent() {
                   <Settings size={18} />
                 </button>
               </div>
-              <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold">
-                <span>{currentTime.toLocaleDateString(locale, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
-                <span className="text-primary">•</span>
-                <span>{currentTime.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-              </div>
+              <LiveClock locale={locale} />
             </div>
           </div>
 

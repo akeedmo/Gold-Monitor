@@ -43,6 +43,7 @@
 
 .ticker-animation {
   animation: ticker 30s linear infinite;
+  will-change: transform;
 }
 
 @keyframes ticker {
