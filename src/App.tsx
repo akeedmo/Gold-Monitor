@@ -195,6 +195,11 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
         <meta name="keywords" content={t('meta_keywords_home')} />
         <meta property="og:title" content={t('site_title')} />
         <meta property="og:description" content={t('meta_desc_home')} />
+        <meta property="og:image" content="https://images.unsplash.com/photo-1610375461246-83ff852e21b3?q=80&w=1200&h=630&fit=crop" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={t('site_title')} />
+        <meta name="twitter:description" content={t('meta_desc_home')} />
+        <meta name="twitter:image" content="https://images.unsplash.com/photo-1610375461246-83ff852e21b3?q=80&w=1200&h=630&fit=crop" />
       </Helmet>
 
       {/* Welcome */}
@@ -316,6 +321,13 @@ const ChartsPage = ({ chartData, currency, setCurrency, language, setLanguage }:
       <Helmet>
         <title>{t('charts_analysis')}</title>
         <meta name="description" content={t('meta_desc_charts')} />
+        <meta property="og:title" content={t('charts_analysis')} />
+        <meta property="og:description" content={t('meta_desc_charts')} />
+        <meta property="og:image" content="https://images.unsplash.com/photo-1610375461246-83ff852e21b3?q=80&w=1200&h=630&fit=crop" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={t('charts_analysis')} />
+        <meta name="twitter:description" content={t('meta_desc_charts')} />
+        <meta name="twitter:image" content="https://images.unsplash.com/photo-1610375461246-83ff852e21b3?q=80&w=1200&h=630&fit=crop" />
       </Helmet>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -503,6 +515,13 @@ const NewsPage = ({ news }: any) => {
       <Helmet>
         <title>{t('gold_news_markets')}</title>
         <meta name="description" content={t('meta_desc_news')} />
+        <meta property="og:title" content={t('gold_news_markets')} />
+        <meta property="og:description" content={t('meta_desc_news')} />
+        <meta property="og:image" content="https://images.unsplash.com/photo-1610375461246-83ff852e21b3?q=80&w=1200&h=630&fit=crop" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={t('gold_news_markets')} />
+        <meta name="twitter:description" content={t('meta_desc_news')} />
+        <meta name="twitter:image" content="https://images.unsplash.com/photo-1610375461246-83ff852e21b3?q=80&w=1200&h=630&fit=crop" />
       </Helmet>
       <h2 className="text-3xl font-bold gold-text-gradient">{t('gold_news_markets')}</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -571,6 +590,13 @@ const TipsPage = () => {
       <Helmet>
         <title>{t('investment_tips')}</title>
         <meta name="description" content={t('meta_desc_tips')} />
+        <meta property="og:title" content={t('investment_tips')} />
+        <meta property="og:description" content={t('meta_desc_tips')} />
+        <meta property="og:image" content="https://images.unsplash.com/photo-1610375461246-83ff852e21b3?q=80&w=1200&h=630&fit=crop" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={t('investment_tips')} />
+        <meta name="twitter:description" content={t('meta_desc_tips')} />
+        <meta name="twitter:image" content="https://images.unsplash.com/photo-1610375461246-83ff852e21b3?q=80&w=1200&h=630&fit=crop" />
       </Helmet>
       <h2 className="text-3xl font-bold gold-text-gradient">{t('investment_tips')}</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -602,6 +628,13 @@ const AboutPage = () => {
       <Helmet>
         <title>{t('about_title')}</title>
         <meta name="description" content={t('meta_desc_about')} />
+        <meta property="og:title" content={t('about_title')} />
+        <meta property="og:description" content={t('meta_desc_about')} />
+        <meta property="og:image" content="https://images.unsplash.com/photo-1610375461246-83ff852e21b3?q=80&w=1200&h=630&fit=crop" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={t('about_title')} />
+        <meta name="twitter:description" content={t('meta_desc_about')} />
+        <meta name="twitter:image" content="https://images.unsplash.com/photo-1610375461246-83ff852e21b3?q=80&w=1200&h=630&fit=crop" />
       </Helmet>
       <div className="bg-card p-12 rounded-3xl border border-gold/10 card-shadow text-center space-y-6">
         <div className="w-20 h-20 gold-gradient rounded-3xl flex items-center justify-center text-black mx-auto shadow-xl">
