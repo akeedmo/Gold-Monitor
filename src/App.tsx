@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -24,24 +24,13 @@ import {
   Languages,
   Share2
 } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
-import { 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  LineChart,
-  Line
-} from 'recharts';
-import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Helmet, HelmetProvider } from 'react-helmet-async';
-import AdminDashboard from './AdminDashboard';
 import { useTranslation } from './i18n';
+
+const AdminDashboard = lazy(() => import('./AdminDashboard'));
+const ChartComponent = lazy(() => import('./ChartComponent'));
 
 // --- Types ---
 interface GoldPrice {
@@ -115,6 +104,7 @@ const NewsCard = (props: any) => {
   const handleTranslate = async () => {
     setTranslating(true);
     try {
+      const { GoogleGenAI } = await import("@google/genai");
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
@@ -243,7 +233,7 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
       {/* Price Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {prices.map((item: any) => (
-          <motion.div key={item.id} whileHover={{ y: -5 }} className="bg-card p-6 rounded-2xl border border-gold/10 card-shadow transition-all">
+          <div key={item.id} className="bg-card p-6 rounded-2xl border border-gold/10 card-shadow transition-all hover:-translate-y-1">
             <div className="flex justify-between items-start mb-4">
               <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center text-primary">
                 <Coins size={20} />
@@ -259,7 +249,7 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
               </span>
               <span className="text-primary text-xs font-bold">{currency}</span>
             </div>
-          </motion.div>
+          </div>
         ))}
       </div>
 
@@ -384,91 +374,27 @@ const ChartsPage = ({ chartData, currency, setCurrency, language, setLanguage }:
           </div>
         </div>
 
-        <AnimatePresence>
-          {isChanging && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-[#0b0e11]/80 backdrop-blur-sm z-20 flex items-center justify-center"
-            >
-              <RefreshCw className="w-8 h-8 text-primary animate-spin" />
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {isChanging && (
+          <div className="absolute inset-0 bg-[#0b0e11]/80 backdrop-blur-sm z-20 flex items-center justify-center transition-opacity duration-300">
+            <RefreshCw className="w-8 h-8 text-primary animate-spin" />
+          </div>
+        )}
 
         <div className="h-[500px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart 
-              data={filteredData}
-              onClick={(data: any) => {
-                if (data && data.activePayload && data.activePayload.length > 0) {
-                  setSelectedPoint(data.activePayload[0].payload);
-                }
-              }}
-              margin={{ top: 10, right: 0, left: -20, bottom: 0 }}
-            >
-              <defs>
-                <linearGradient id="colorChart" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#D4AF37" stopOpacity={0.2}/>
-                  <stop offset="95%" stopColor="#D4AF37" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="0" stroke="#1e2329" vertical={true} horizontal={true} />
-              <XAxis 
-                dataKey="timestamp" 
-                tickFormatter={formatXAxis}
-                stroke="#474d57" 
-                fontSize={10} 
-                tickLine={false} 
-                axisLine={false} 
-                dy={10}
-                minTickGap={30}
-              />
-              <YAxis 
-                orientation="right"
-                stroke="#474d57" 
-                fontSize={10} 
-                tickLine={false} 
-                axisLine={false} 
-                domain={['auto', 'auto']} 
-                tickFormatter={(val) => val.toLocaleString(locale)}
-              />
-              <Tooltip 
-                content={({ active, payload }: any) => {
-                  if (active && payload && payload.length) {
-                    const date = new Date(payload[0].payload.timestamp);
-                    return (
-                      <div className="bg-[#1e2329] border border-[#474d57] p-3 rounded shadow-2xl text-right text-[11px]">
-                        <p className="text-white font-bold mb-1">{t('price')} <span className="text-primary">{payload[0].value.toLocaleString(locale, { minimumFractionDigits: 2 })} {currency}</span></p>
-                        <p className="text-gray-400">{t('date')} {date.toLocaleDateString(locale)}</p>
-                        <p className="text-gray-400">{t('time')} {date.toLocaleTimeString(locale)}</p>
-                      </div>
-                    );
-                  }
-                  return null;
-                }}
-                cursor={{ stroke: '#474d57', strokeWidth: 1 }}
-              />
-              <Area 
-                type="monotone" 
-                dataKey="value" 
-                stroke="#D4AF37" 
-                strokeWidth={2} 
-                fillOpacity={1} 
-                fill="url(#colorChart)" 
-                animationDuration={1000}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+          <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-primary"><RefreshCw className="animate-spin w-8 h-8" /></div>}>
+            <ChartComponent 
+              filteredData={filteredData} 
+              formatXAxis={formatXAxis} 
+              locale={locale} 
+              currency={currency} 
+              t={t} 
+              setSelectedPoint={setSelectedPoint} 
+            />
+          </Suspense>
         </div>
         
         {selectedPoint && (
-          <motion.div 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-6 p-4 bg-white/5 rounded-2xl border border-gold/20 flex justify-between items-center"
-          >
+          <div className="mt-6 p-4 bg-white/5 rounded-2xl border border-gold/20 flex justify-between items-center animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex flex-col">
               <span className="text-[10px] text-gray-500 font-bold uppercase">{t('selected_price')}</span>
               <span className="text-xl font-bold text-primary">{selectedPoint.value.toLocaleString(locale)} {currency}</span>
@@ -482,7 +408,7 @@ const ChartsPage = ({ chartData, currency, setCurrency, language, setLanguage }:
                 {new Date(selectedPoint.timestamp).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
               </p>
             </div>
-          </motion.div>
+          </div>
         )}
 
         <div className="mt-6 flex justify-between items-center text-[10px] text-gray-500 font-bold uppercase tracking-widest">
@@ -927,7 +853,11 @@ function AppContent() {
   }
 
   if (isAdmin) {
-    return <AdminDashboard onBack={() => setIsAdmin(false)} />;
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-bg flex items-center justify-center"><RefreshCw className="w-10 h-10 text-primary animate-spin" /></div>}>
+        <AdminDashboard onBack={() => setIsAdmin(false)} />
+      </Suspense>
+    );
   }
 
   return (
@@ -982,38 +912,31 @@ function AppContent() {
         </div>
 
         {/* Mobile Menu */}
-        <AnimatePresence>
-          {isMenuOpen && (
-            <motion.div 
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="md:hidden overflow-hidden bg-card border-t border-white/5 mt-4"
-            >
-              <nav className="flex flex-col p-4 gap-4 text-sm font-bold">
-                <Link to="/" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_home')}</Link>
-                <Link to="/charts" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_charts')}</Link>
-                <Link to="/news" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_news')}</Link>
-                <Link to="/tips" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_tips')}</Link>
-                <Link to="/about" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_about')}</Link>
-                <button 
-                  onClick={() => { handleShare(); setIsMenuOpen(false); }} 
-                  className="flex items-center gap-2 text-gray-400 hover:text-primary text-right"
-                >
-                  <Share2 size={18} />
-                  <span>{t('share_app') || 'مشاركة الموقع'}</span>
-                </button>
-                <button 
-                  onClick={() => { setIsAdmin(true); setIsMenuOpen(false); }} 
-                  className="flex items-center gap-2 text-primary pt-4 border-t border-white/5"
-                >
-                  <Settings size={18} />
-                  <span>{t('admin_settings')}</span>
-                </button>
-              </nav>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {isMenuOpen && (
+          <div className="md:hidden overflow-hidden bg-card border-t border-white/5 mt-4 animate-in fade-in slide-in-from-top-4 duration-300">
+            <nav className="flex flex-col p-4 gap-4 text-sm font-bold">
+              <Link to="/" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_home')}</Link>
+              <Link to="/charts" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_charts')}</Link>
+              <Link to="/news" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_news')}</Link>
+              <Link to="/tips" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_tips')}</Link>
+              <Link to="/about" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_about')}</Link>
+              <button 
+                onClick={() => { handleShare(); setIsMenuOpen(false); }} 
+                className="flex items-center gap-2 text-gray-400 hover:text-primary text-right"
+              >
+                <Share2 size={18} />
+                <span>{t('share_app') || 'مشاركة الموقع'}</span>
+              </button>
+              <button 
+                onClick={() => { setIsAdmin(true); setIsMenuOpen(false); }} 
+                className="flex items-center gap-2 text-primary pt-4 border-t border-white/5"
+              >
+                <Settings size={18} />
+                <span>{t('admin_settings')}</span>
+              </button>
+            </nav>
+          </div>
+        )}
       </header>
 
       <TickerBar prices={prices} currency={currency} />

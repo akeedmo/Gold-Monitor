@@ -34,7 +34,6 @@ import {
   Cell
 } from 'recharts';
 import axios from 'axios';
-import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from './i18n';
 
 interface Stats {
@@ -229,7 +228,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   if (!token) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center p-6" dir={isRTL ? "rtl" : "ltr"}>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-card p-8 rounded-2xl shadow-xl w-full max-w-md border border-gold/10">
+        <div className="bg-card p-8 rounded-2xl shadow-xl w-full max-w-md border border-gold/10 animate-in fade-in slide-in-from-bottom-4 duration-500">
           <div className="flex flex-col items-center mb-8">
             <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-4">
               <Lock className="text-primary" size={32} />
@@ -252,7 +251,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
             </button>
             <button type="button" onClick={onBack} className="w-full py-2 text-gray-400 text-sm hover:text-primary transition-colors">{t('back_to_site')}</button>
           </form>
-        </motion.div>
+        </div>
       </div>
     );
   }
@@ -329,28 +328,16 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
               {activeTab === 'monetization' && t('monetization')}
             </h1>
             <div className="flex items-center gap-4">
-              <AnimatePresence>
-                {successMessage && (
-                  <motion.div 
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 20 }}
-                    className="bg-green-500/20 text-green-400 px-4 py-2 rounded-xl text-sm font-bold border border-green-500/30"
-                  >
-                    {successMessage}
-                  </motion.div>
-                )}
-                {error && (
-                  <motion.div 
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 20 }}
-                    className="bg-red-500/20 text-red-400 px-4 py-2 rounded-xl text-sm font-bold border border-red-500/30"
-                  >
-                    {error}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {successMessage && (
+                <div className="bg-green-500/20 text-green-400 px-4 py-2 rounded-xl text-sm font-bold border border-green-500/30 animate-in fade-in slide-in-from-right-4 duration-300">
+                  {successMessage}
+                </div>
+              )}
+              {error && (
+                <div className="bg-red-500/20 text-red-400 px-4 py-2 rounded-xl text-sm font-bold border border-red-500/30 animate-in fade-in slide-in-from-right-4 duration-300">
+                  {error}
+                </div>
+              )}
               <button onClick={onBack} className="flex items-center gap-2 text-primary font-bold hover:gap-3 transition-all">
                 <ArrowLeft size={18} />
                 {t('back_to_site')}
@@ -493,53 +480,46 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
 
           {activeTab === 'news' && (
             <div className="space-y-8">
-              <AnimatePresence>
-                {selectedItem && (
-                  <motion.div 
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    className="fixed inset-0 z-[100] bg-bg/95 backdrop-blur-md p-6 md:p-12 overflow-y-auto"
-                  >
-                    <div className="max-w-4xl mx-auto space-y-8">
-                      <button 
-                        onClick={() => setSelectedItem(null)}
-                        className="flex items-center gap-2 text-primary font-bold hover:gap-3 transition-all mb-8"
-                      >
-                        <ArrowLeft size={20} />
-                        {t('back_to_list')}
-                      </button>
-                      
-                      <div className="space-y-4">
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full">{selectedItem.source}</span>
-                          <span className="text-xs text-gray-500">{new Date(selectedItem.pubDate).toLocaleString(locale)}</span>
-                        </div>
-                        <h2 className="text-3xl md:text-4xl font-bold text-white leading-tight">{selectedItem.title}</h2>
-                        <div className="flex items-center gap-6 text-gray-400 text-sm border-y border-white/5 py-4">
-                          <span className="flex items-center gap-2"><TrendingUp size={16} /> {selectedItem.likes || 0} {t('likes')}</span>
-                          <span className="flex items-center gap-2"><Eye size={16} /> {selectedItem.views || 0} {t('views')}</span>
-                        </div>
-                        <div className="text-gray-300 text-lg leading-relaxed whitespace-pre-wrap pt-4">
-                          {selectedItem.contentSnippet}
-                        </div>
-                        {selectedItem.link && (
-                          <div className="pt-8">
-                            <a 
-                              href={selectedItem.link} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-2 text-primary font-bold hover:underline"
-                            >
-                              {t('original_source_link')} <ChevronRight size={18} />
-                            </a>
-                          </div>
-                        )}
+              {selectedItem && (
+                <div className="fixed inset-0 z-[100] bg-bg/95 backdrop-blur-md p-6 md:p-12 overflow-y-auto animate-in fade-in zoom-in-95 duration-300">
+                  <div className="max-w-4xl mx-auto space-y-8">
+                    <button 
+                      onClick={() => setSelectedItem(null)}
+                      className="flex items-center gap-2 text-primary font-bold hover:gap-3 transition-all mb-8"
+                    >
+                      <ArrowLeft size={20} />
+                      {t('back_to_list')}
+                    </button>
+                    
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full">{selectedItem.source}</span>
+                        <span className="text-xs text-gray-500">{new Date(selectedItem.pubDate).toLocaleString(locale)}</span>
                       </div>
+                      <h2 className="text-3xl md:text-4xl font-bold text-white leading-tight">{selectedItem.title}</h2>
+                      <div className="flex items-center gap-6 text-gray-400 text-sm border-y border-white/5 py-4">
+                        <span className="flex items-center gap-2"><TrendingUp size={16} /> {selectedItem.likes || 0} {t('likes')}</span>
+                        <span className="flex items-center gap-2"><Eye size={16} /> {selectedItem.views || 0} {t('views')}</span>
+                      </div>
+                      <div className="text-gray-300 text-lg leading-relaxed whitespace-pre-wrap pt-4">
+                        {selectedItem.contentSnippet}
+                      </div>
+                      {selectedItem.link && (
+                        <div className="pt-8">
+                          <a 
+                            href={selectedItem.link} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 text-primary font-bold hover:underline"
+                          >
+                            {t('original_source_link')} <ChevronRight size={18} />
+                          </a>
+                        </div>
+                      )}
                     </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                  </div>
+                </div>
+              )}
 
               <div className="bg-card p-8 rounded-2xl border border-gold/10 shadow-lg space-y-6">
                 <h3 className="text-lg font-bold flex items-center gap-2 text-white">
