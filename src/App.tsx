@@ -190,17 +190,40 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
   return (
     <div className="space-y-8 pb-24 md:pb-8">
       <Helmet>
-        <title>{t('site_title')}</title>
-        <meta name="description" content={t('meta_desc_home')} />
-        <meta name="keywords" content={t('meta_keywords_home')} />
-        <meta property="og:title" content={t('site_title')} />
-        <meta property="og:description" content={t('meta_desc_home')} />
-        <meta property="og:image" content="https://images.unsplash.com/photo-1610375461246-83ff852e21b3?q=80&w=1200&h=630&fit=crop" />
+        <title>أسعار الذهب اليوم مباشرة | مراقب الذهب العالمي</title>
+        <meta name="description" content="موقع مراقب الذهب لمتابعة أسعار الذهب العالمية والمحلية لحظة بلحظة مع دعم عدة عملات ولغات. الموقع يدعم ثلاث لغات: العربية، الإنجليزية، التركية، ويوفر متابعة أسعار الذهب بسهولة من الجوال والكمبيوتر. مناسب للمتداولين والمستثمرين وكل المهتمين بأسعار الذهب." />
+        <meta name="keywords" content="أسعار الذهب, سعر الذهب اليوم, Gold Price, اسعار الذهب مباشر, Gold Live, متابعة الذهب" />
+        <meta property="og:title" content="أسعار الذهب اليوم مباشرة | مراقب الذهب العالمي" />
+        <meta property="og:description" content="موقع مراقب الذهب لمتابعة أسعار الذهب العالمية والمحلية لحظة بلحظة مع دعم عدة عملات ولغات. الموقع يدعم ثلاث لغات: العربية، الإنجليزية، التركية، ويوفر متابعة أسعار الذهب بسهولة من الجوال والكمبيوتر. مناسب للمتداولين والمستثمرين وكل المهتمين بأسعار الذهب." />
+        <meta property="og:image" content="https://images.unsplash.com/photo-1612831455540-48b1ebca68d7?auto=format&fit=crop&w=1470&q=80" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content={t('site_title')} />
-        <meta name="twitter:description" content={t('meta_desc_home')} />
-        <meta name="twitter:image" content="https://images.unsplash.com/photo-1610375461246-83ff852e21b3?q=80&w=1200&h=630&fit=crop" />
+        <meta name="twitter:title" content="أسعار الذهب اليوم مباشرة | مراقب الذهب العالمي" />
+        <meta name="twitter:description" content="موقع مراقب الذهب لمتابعة أسعار الذهب العالمية والمحلية لحظة بلحظة مع دعم عدة عملات ولغات. الموقع يدعم ثلاث لغات: العربية، الإنجليزية، التركية، ويوفر متابعة أسعار الذهب بسهولة من الجوال والكمبيوتر. مناسب للمتداولين والمستثمرين وكل المهتمين بأسعار الذهب." />
+        <meta name="twitter:image" content="https://images.unsplash.com/photo-1612831455540-48b1ebca68d7?auto=format&fit=crop&w=1470&q=80" />
       </Helmet>
+
+      {/* Hero Section with Background */}
+      <div className="relative w-full rounded-3xl overflow-hidden mb-8 shadow-2xl border border-gold/20">
+        <div 
+          className="absolute inset-0 bg-cover bg-center z-0" 
+          style={{ backgroundImage: "url('https://images.unsplash.com/photo-1612831455540-48b1ebca68d7?auto=format&fit=crop&w=1470&q=80')" }}
+        />
+        <div className="absolute inset-0 bg-black/70 z-10" />
+        <div className="relative z-20 p-8 md:p-12 flex flex-col items-center text-center">
+          <h1 className="text-3xl md:text-5xl font-bold text-white mb-4 drop-shadow-lg">
+            أسعار الذهب اليوم مباشرة <span className="gold-text-gradient">| Gold Price Live</span>
+          </h1>
+          <p className="text-gray-300 max-w-2xl text-sm md:text-base leading-relaxed mb-6">
+            موقع مراقب الذهب لمتابعة أسعار الذهب العالمية والمحلية لحظة بلحظة مع دعم عدة عملات ولغات. 
+            تعرف على سعر الذهب الآن بسهولة من الجوال والكمبيوتر.
+          </p>
+          <div className="flex flex-wrap justify-center gap-3 text-xs font-bold">
+            <span className="bg-primary/20 text-primary px-3 py-1.5 rounded-full border border-primary/30">أسعار الذهب</span>
+            <span className="bg-primary/20 text-primary px-3 py-1.5 rounded-full border border-primary/30">سعر الذهب اليوم</span>
+            <span className="bg-primary/20 text-primary px-3 py-1.5 rounded-full border border-primary/30">اسعار الذهب مباشر</span>
+          </div>
+        </div>
+      </div>
 
       {/* Welcome */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
