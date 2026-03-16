@@ -185,18 +185,18 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
         <meta name="keywords" content="أسعار الذهب, سعر الذهب اليوم, Gold Price, اسعار الذهب مباشر, Gold Live, متابعة الذهب" />
         <meta property="og:title" content="أسعار الذهب اليوم مباشرة | مراقب الذهب العالمي" />
         <meta property="og:description" content="موقع مراقب الذهب لمتابعة أسعار الذهب العالمية والمحلية لحظة بلحظة مع دعم عدة عملات ولغات. الموقع يدعم ثلاث لغات: العربية، الإنجليزية، التركية، ويوفر متابعة أسعار الذهب بسهولة من الجوال والكمبيوتر. مناسب للمتداولين والمستثمرين وكل المهتمين بأسعار الذهب." />
-        <meta property="og:image" content="https://images.unsplash.com/photo-1612831455540-48b1ebca68d7?auto=format&fit=crop&w=1470&q=80" />
+        <meta property="og:image" content="https://gold-monitor-production.up.railway.app/logo.png" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="أسعار الذهب اليوم مباشرة | مراقب الذهب العالمي" />
         <meta name="twitter:description" content="موقع مراقب الذهب لمتابعة أسعار الذهب العالمية والمحلية لحظة بلحظة مع دعم عدة عملات ولغات. الموقع يدعم ثلاث لغات: العربية، الإنجليزية، التركية، ويوفر متابعة أسعار الذهب بسهولة من الجوال والكمبيوتر. مناسب للمتداولين والمستثمرين وكل المهتمين بأسعار الذهب." />
-        <meta name="twitter:image" content="https://images.unsplash.com/photo-1612831455540-48b1ebca68d7?auto=format&fit=crop&w=1470&q=80" />
+        <meta name="twitter:image" content="https://gold-monitor-production.up.railway.app/logo.png" />
       </Helmet>
 
       {/* Hero Section with Background */}
       <div className="relative w-full rounded-3xl overflow-hidden mb-8 shadow-2xl border border-gold/20">
         <div 
           className="absolute inset-0 bg-cover bg-center z-0" 
-          style={{ backgroundImage: "url('https://images.unsplash.com/photo-1612831455540-48b1ebca68d7?auto=format&fit=crop&w=1470&q=80')" }}
+          style={{ backgroundImage: "url('https://images.unsplash.com/photo-1612831455540-48b1ebca68d7')" }}
         />
         <div className="absolute inset-0 bg-black/70 z-10" />
         <div className="relative z-20 p-8 md:p-12 flex flex-col items-center text-center">
@@ -336,11 +336,11 @@ const ChartsPage = ({ chartData, currency, setCurrency, language, setLanguage }:
         <meta name="description" content={t('meta_desc_charts')} />
         <meta property="og:title" content={t('charts_analysis')} />
         <meta property="og:description" content={t('meta_desc_charts')} />
-        <meta property="og:image" content="https://images.unsplash.com/photo-1610375461246-83ff852e21b3?q=80&w=1200&h=630&fit=crop" />
+        <meta property="og:image" content="https://gold-monitor-production.up.railway.app/logo.png" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={t('charts_analysis')} />
         <meta name="twitter:description" content={t('meta_desc_charts')} />
-        <meta name="twitter:image" content="https://images.unsplash.com/photo-1610375461246-83ff852e21b3?q=80&w=1200&h=630&fit=crop" />
+        <meta name="twitter:image" content="https://gold-monitor-production.up.railway.app/logo.png" />
       </Helmet>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -466,11 +466,11 @@ const NewsPage = ({ news }: any) => {
         <meta name="description" content={t('meta_desc_news')} />
         <meta property="og:title" content={t('gold_news_markets')} />
         <meta property="og:description" content={t('meta_desc_news')} />
-        <meta property="og:image" content="https://images.unsplash.com/photo-1610375461246-83ff852e21b3?q=80&w=1200&h=630&fit=crop" />
+        <meta property="og:image" content="https://gold-monitor-production.up.railway.app/logo.png" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={t('gold_news_markets')} />
         <meta name="twitter:description" content={t('meta_desc_news')} />
-        <meta name="twitter:image" content="https://images.unsplash.com/photo-1610375461246-83ff852e21b3?q=80&w=1200&h=630&fit=crop" />
+        <meta name="twitter:image" content="https://gold-monitor-production.up.railway.app/logo.png" />
       </Helmet>
       <h2 className="text-3xl font-bold gold-text-gradient">{t('gold_news_markets')}</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -541,11 +541,11 @@ const TipsPage = () => {
         <meta name="description" content={t('meta_desc_tips')} />
         <meta property="og:title" content={t('investment_tips')} />
         <meta property="og:description" content={t('meta_desc_tips')} />
-        <meta property="og:image" content="https://images.unsplash.com/photo-1610375461246-83ff852e21b3?q=80&w=1200&h=630&fit=crop" />
+        <meta property="og:image" content="https://gold-monitor-production.up.railway.app/logo.png" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={t('investment_tips')} />
         <meta name="twitter:description" content={t('meta_desc_tips')} />
-        <meta name="twitter:image" content="https://images.unsplash.com/photo-1610375461246-83ff852e21b3?q=80&w=1200&h=630&fit=crop" />
+        <meta name="twitter:image" content="https://gold-monitor-production.up.railway.app/logo.png" />
       </Helmet>
       <h2 className="text-3xl font-bold gold-text-gradient">{t('investment_tips')}</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -579,11 +579,11 @@ const AboutPage = () => {
         <meta name="description" content={t('meta_desc_about')} />
         <meta property="og:title" content={t('about_title')} />
         <meta property="og:description" content={t('meta_desc_about')} />
-        <meta property="og:image" content="https://images.unsplash.com/photo-1610375461246-83ff852e21b3?q=80&w=1200&h=630&fit=crop" />
+        <meta property="og:image" content="https://gold-monitor-production.up.railway.app/logo.png" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={t('about_title')} />
         <meta name="twitter:description" content={t('meta_desc_about')} />
-        <meta name="twitter:image" content="https://images.unsplash.com/photo-1610375461246-83ff852e21b3?q=80&w=1200&h=630&fit=crop" />
+        <meta name="twitter:image" content="https://gold-monitor-production.up.railway.app/logo.png" />
       </Helmet>
       <div className="bg-card p-12 rounded-3xl border border-gold/10 card-shadow text-center space-y-6">
         <div className="w-20 h-20 gold-gradient rounded-3xl flex items-center justify-center text-black mx-auto shadow-xl">
