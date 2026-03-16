@@ -530,12 +530,13 @@ async function fetchExchangeRates() {
 // SEO Routes
 app.get("/robots.txt", (req, res) => {
   res.type("text/plain");
-  res.send("User-agent: *\nAllow: /\nSitemap: " + (process.env.APP_URL || "http://localhost:3000") + "/sitemap.xml");
+  const baseUrl = process.env.APP_URL || `https://${req.get('host')}`;
+  res.send("User-agent: *\nAllow: /\nSitemap: " + baseUrl + "/sitemap.xml");
 });
 
 app.get("/sitemap.xml", (req, res) => {
   res.type("application/xml");
-  const baseUrl = process.env.APP_URL || "http://localhost:3000";
+  const baseUrl = process.env.APP_URL || `https://${req.get('host')}`;
   res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>${baseUrl}/</loc><priority>1.0</priority></url>
