@@ -192,29 +192,6 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
         <meta name="twitter:image" content="https://gold-monitor-production.up.railway.app/logo.png" />
       </Helmet>
 
-      {/* Hero Section with Background */}
-      <div className="relative w-full rounded-3xl overflow-hidden mb-8 shadow-2xl border border-gold/20">
-        <div 
-          className="absolute inset-0 bg-cover bg-center z-0" 
-          style={{ backgroundImage: "url('https://images.unsplash.com/photo-1612831455540-48b1ebca68d7')" }}
-        />
-        <div className="absolute inset-0 bg-black/70 z-10" />
-        <div className="relative z-20 p-8 md:p-12 flex flex-col items-center text-center">
-          <h1 className="text-3xl md:text-5xl font-bold text-white mb-4 drop-shadow-lg">
-            أسعار الذهب اليوم مباشرة <span className="gold-text-gradient">| Gold Price Live</span>
-          </h1>
-          <p className="text-gray-300 max-w-2xl text-sm md:text-base leading-relaxed mb-6">
-            موقع مراقب الذهب لمتابعة أسعار الذهب العالمية والمحلية لحظة بلحظة مع دعم عدة عملات ولغات. 
-            تعرف على سعر الذهب الآن بسهولة من الجوال والكمبيوتر.
-          </p>
-          <div className="flex flex-wrap justify-center gap-3 text-xs font-bold">
-            <span className="bg-primary/20 text-primary px-3 py-1.5 rounded-full border border-primary/30">أسعار الذهب</span>
-            <span className="bg-primary/20 text-primary px-3 py-1.5 rounded-full border border-primary/30">سعر الذهب اليوم</span>
-            <span className="bg-primary/20 text-primary px-3 py-1.5 rounded-full border border-primary/30">اسعار الذهب مباشر</span>
-          </div>
-        </div>
-      </div>
-
       {/* Welcome */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -253,25 +230,9 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
         ))}
       </div>
 
-      {/* Calculator & News */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-1">
-          <GoldCalculator prices={prices} currency={currency} amount={calcAmount} setAmount={setCalcAmount} type={calcType} setType={setCalcType} />
-        </div>
-        <div className="lg:col-span-2 space-y-6">
-          <div className="flex justify-between items-center">
-            <h3 className="text-xl font-bold flex items-center gap-3">
-              <Newspaper className="text-primary" />
-              {t('latest_news')}
-            </h3>
-            <Link to="/news" className="text-xs font-bold text-primary hover:underline">{t('view_all_news')}</Link>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {news.slice(0, 4).map((item: any) => (
-              <NewsCard key={item.id} item={item} locale={locale} />
-            ))}
-          </div>
-        </div>
+      {/* Calculator */}
+      <div className="max-w-2xl mx-auto w-full">
+        <GoldCalculator prices={prices} currency={currency} amount={calcAmount} setAmount={setCalcAmount} type={calcType} setType={setCalcType} />
       </div>
 
       {/* Subscribe to Alerts */}
@@ -293,6 +254,29 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
             <button onClick={handleSubscribe} disabled={subLoading} className="w-full bg-primary text-black px-6 py-3 rounded-xl font-bold text-sm hover:bg-primary/80 transition-all shadow-lg shadow-primary/20">
               {subLoading ? <RefreshCw className="animate-spin mx-auto" size={18} /> : t('subscribe_now')}
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* SEO Description Section (Moved from top) */}
+      <div className="relative w-full rounded-3xl overflow-hidden mt-12 shadow-2xl border border-gold/20">
+        <div 
+          className="absolute inset-0 bg-cover bg-center z-0" 
+          style={{ backgroundImage: "url('https://images.unsplash.com/photo-1612831455540-48b1ebca68d7')" }}
+        />
+        <div className="absolute inset-0 bg-black/70 z-10" />
+        <div className="relative z-20 p-8 md:p-12 flex flex-col items-center text-center">
+          <h1 className="text-3xl md:text-5xl font-bold text-white mb-4 drop-shadow-lg">
+            أسعار الذهب اليوم مباشرة <span className="gold-text-gradient">| Gold Price Live</span>
+          </h1>
+          <p className="text-gray-300 max-w-2xl text-sm md:text-base leading-relaxed mb-6">
+            موقع مراقب الذهب لمتابعة أسعار الذهب العالمية والمحلية لحظة بلحظة مع دعم عدة عملات ولغات. 
+            تعرف على سعر الذهب الآن بسهولة من الجوال والكمبيوتر.
+          </p>
+          <div className="flex flex-wrap justify-center gap-3 text-xs font-bold">
+            <span className="bg-primary/20 text-primary px-3 py-1.5 rounded-full border border-primary/30">أسعار الذهب</span>
+            <span className="bg-primary/20 text-primary px-3 py-1.5 rounded-full border border-primary/30">سعر الذهب اليوم</span>
+            <span className="bg-primary/20 text-primary px-3 py-1.5 rounded-full border border-primary/30">اسعار الذهب مباشر</span>
           </div>
         </div>
       </div>
