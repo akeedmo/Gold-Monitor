@@ -11,6 +11,34 @@ interface Translations {
 }
 
 export const translations: Translations = {
+  "prices_in_country": {
+    ar: "أسعار الذهب في",
+    en: "Gold Prices in",
+    tr: "Altın Fiyatları"
+  },
+  "USD": { ar: 'الدولار الأمريكي', en: 'US Dollar', tr: 'ABD Doları' },
+  "EUR": { ar: 'اليورو', en: 'Euro', tr: 'Euro' },
+  "GBP": { ar: 'الجنيه الإسترليني', en: 'British Pound', tr: 'İngiliz Sterlini' },
+  "JOD": { ar: 'الأردن', en: 'Jordan', tr: 'Ürdün' },
+  "EGP": { ar: 'مصر', en: 'Egypt', tr: 'Mısır' },
+  "LYD": { ar: 'ليبيا', en: 'Libya', tr: 'Libya' },
+  "SAR": { ar: 'السعودية', en: 'Saudi Arabia', tr: 'Suudi Arabistan' },
+  "AED": { ar: 'الإمارات', en: 'UAE', tr: 'BAE' },
+  "KWD": { ar: 'الكويت', en: 'Kuwait', tr: 'Kuveyt' },
+  "QAR": { ar: 'قطر', en: 'Qatar', tr: 'Katar' },
+  "BHD": { ar: 'البحرين', en: 'Bahrain', tr: 'Bahreyn' },
+  "OMR": { ar: 'عمان', en: 'Oman', tr: 'Umman' },
+  "YER": { ar: 'اليمن', en: 'Yemen', tr: 'Yemen' },
+  "share_description": {
+    ar: "تابع أسعار الذهب العالمية والمحلية لحظة بلحظة مع أدق التحليلات والأخبار الاقتصادية. وجهتك الأولى للاستثمار الآمن.",
+    en: "Follow global and local gold prices moment by moment with the most accurate analysis and economic news. Your first destination for safe investment.",
+    tr: "En doğru analiz ve ekonomi haberleri ile küresel ve yerel altın fiyatlarını an be an takip edin. Güvenli yatırım için ilk adresiniz."
+  },
+  "gold_prices_today": {
+    ar: "أسعار الذهب اليوم",
+    en: "Gold Prices Today",
+    tr: "Bugünkü Altın Fiyatları"
+  },
   "site_title": {
     ar: "أسعار الذهب المباشرة",
     en: "Live Gold Prices",

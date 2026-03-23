@@ -161,7 +161,7 @@ const CurrencyLanguageSelector = ({ currency, setCurrency, language, setLanguage
   );
 };
 
-const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate, setCurrency, setLanguage, calcAmount, setCalcAmount, calcType, setCalcType }: any) => {
+const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate, setCurrency, setLanguage, calcAmount, setCalcAmount, calcType, setCalcType, handleShare }: any) => {
   const { t, language } = useTranslation();
   const locale = language === 'ar' ? 'ar-SA' : language === 'tr' ? 'tr-TR' : 'en-US';
   const [email, setEmail] = useState('');
@@ -209,16 +209,16 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
     <div className="space-y-8 pb-24 md:pb-8">
       <Helmet>
         <title>مراقب الذهب | أسعار الذهب اليوم مباشرة</title>
-        <meta name="description" content="تابع أسعار الذهب العالمية والمحلية لحظة بلحظة. أدق الأسعار بجميع العملات واللغات." />
+        <meta name="description" content="تابع أسعار الذهب العالمية والمحلية لحظة بلحظة. أدق الأسعار بجميع العملات واللغات. وجهتك الأولى للاستثمار الآمن." />
         <meta name="keywords" content="أسعار الذهب, سعر الذهب اليوم, Gold Price, اسعار الذهب مباشر" />
         <meta property="og:title" content="مراقب الذهب | أسعار الذهب اليوم مباشرة" />
-        <meta property="og:description" content="تابع أسعار الذهب العالمية والمحلية لحظة بلحظة. أدق الأسعار بجميع العملات واللغات." />
-        <meta property="og:image" content="https://goldmonitor-1b4ce.web.app/logo.png" />
-        <meta property="og:url" content="https://goldmonitor-1b4ce.web.app" />
+        <meta property="og:description" content="تابع أسعار الذهب العالمية والمحلية لحظة بلحظة. أدق الأسعار بجميع العملات واللغات. وجهتك الأولى للاستثمار الآمن." />
+        <meta property="og:image" content="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=1200&h=630" />
+        <meta property="og:url" content="https://ais-dev-7cu4clajx54jrmaysp6ap2-57287700371.europe-west2.run.app" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="مراقب الذهب | أسعار الذهب اليوم مباشرة" />
         <meta name="twitter:description" content="تابع أسعار الذهب العالمية والمحلية لحظة بلحظة. أدق الأسعار بجميع العملات واللغات." />
-        <meta name="twitter:image" content="https://goldmonitor-1b4ce.web.app/logo.png" />
+        <meta name="twitter:image" content="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=1200&h=630" />
       </Helmet>
 
       {/* Welcome */}
@@ -230,29 +230,6 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
           <h2 className="text-3xl font-bold gold-text-gradient">{t('market_overview')}</h2>
           <div className="flex items-center gap-4">
             <p className="text-sm text-gray-500">{t('last_update')} {lastUpdate.toLocaleTimeString(locale)}</p>
-            <button 
-              onClick={async () => {
-                if (navigator.share) {
-                  try {
-                    await navigator.share({
-                      title: 'مراقب الذهب',
-                      text: 'تابع أسعار الذهب العالمية والمحلية لحظة بلحظة',
-                      url: window.location.href,
-                    });
-                  } catch (err: any) {
-                    if (err.name !== 'AbortError') {
-                      console.error('Error sharing:', err);
-                    }
-                  }
-                } else {
-                  navigator.clipboard.writeText(window.location.href);
-                  alert('تم نسخ الرابط!');
-                }
-              }}
-              className="p-2 bg-white/5 rounded-lg border border-gold/20 text-primary hover:bg-white/10 transition-all"
-            >
-              <Share2 size={16} />
-            </button>
           </div>
         </div>
         <div className="flex items-center gap-2 text-xs font-bold text-up bg-up/10 px-3 py-1.5 rounded-full">
@@ -282,6 +259,22 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Share Button Below Prices */}
+      <div className="flex justify-center mt-4">
+        <button 
+          onClick={() => handleShare('prices')}
+          className="w-full max-w-md gold-gradient text-black px-6 py-5 rounded-2xl font-bold text-base hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-4 shadow-[0_0_25px_rgba(212,175,55,0.4)] hover:shadow-[0_0_40px_rgba(212,175,55,0.6)] group relative overflow-hidden"
+        >
+          <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 skew-x-[-20deg]" />
+          <div className="bg-black/10 p-2 rounded-xl group-hover:bg-black/20 transition-colors relative z-10">
+            <Share2 size={24} />
+          </div>
+          <span className="relative z-10 text-lg">
+            {language === 'ar' ? 'اضغط لمشاركة الاسعار المحدثه على صفحتك' : 'Click to share updated prices on your page'}
+          </span>
+        </button>
       </div>
 
       {/* Calculator */}
@@ -404,11 +397,11 @@ const ChartsPage = ({ chartData, currency, setCurrency, language, setLanguage }:
         <meta name="description" content={t('meta_desc_charts')} />
         <meta property="og:title" content={t('charts_analysis')} />
         <meta property="og:description" content={t('meta_desc_charts')} />
-        <meta property="og:image" content="https://goldmonitor-1b4ce.web.app/logo.png" />
+        <meta property="og:image" content="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=1200&h=630" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={t('charts_analysis')} />
         <meta name="twitter:description" content={t('meta_desc_charts')} />
-        <meta name="twitter:image" content="https://goldmonitor-1b4ce.web.app/logo.png" />
+        <meta name="twitter:image" content="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=1200&h=630" />
       </Helmet>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -534,11 +527,11 @@ const NewsPage = ({ news }: any) => {
         <meta name="description" content={t('meta_desc_news')} />
         <meta property="og:title" content={t('gold_news_markets')} />
         <meta property="og:description" content={t('meta_desc_news')} />
-        <meta property="og:image" content="https://goldmonitor-1b4ce.web.app/logo.png" />
+        <meta property="og:image" content="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=1200&h=630" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={t('gold_news_markets')} />
         <meta name="twitter:description" content={t('meta_desc_news')} />
-        <meta name="twitter:image" content="https://goldmonitor-1b4ce.web.app/logo.png" />
+        <meta name="twitter:image" content="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=1200&h=630" />
       </Helmet>
       <h2 className="text-3xl font-bold gold-text-gradient">{t('gold_news_markets')}</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -609,11 +602,11 @@ const TipsPage = () => {
         <meta name="description" content={t('meta_desc_tips')} />
         <meta property="og:title" content={t('investment_tips')} />
         <meta property="og:description" content={t('meta_desc_tips')} />
-        <meta property="og:image" content="https://goldmonitor-1b4ce.web.app/logo.png" />
+        <meta property="og:image" content="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=1200&h=630" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={t('investment_tips')} />
         <meta name="twitter:description" content={t('meta_desc_tips')} />
-        <meta name="twitter:image" content="https://goldmonitor-1b4ce.web.app/logo.png" />
+        <meta name="twitter:image" content="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=1200&h=630" />
       </Helmet>
       <h2 className="text-3xl font-bold gold-text-gradient">{t('investment_tips')}</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -647,11 +640,11 @@ const AboutPage = () => {
         <meta name="description" content={t('meta_desc_about')} />
         <meta property="og:title" content={t('about_title')} />
         <meta property="og:description" content={t('meta_desc_about')} />
-        <meta property="og:image" content="https://goldmonitor-1b4ce.web.app/logo.png" />
+        <meta property="og:image" content="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=1200&h=630" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={t('about_title')} />
         <meta name="twitter:description" content={t('meta_desc_about')} />
-        <meta name="twitter:image" content="https://goldmonitor-1b4ce.web.app/logo.png" />
+        <meta name="twitter:image" content="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=1200&h=630" />
       </Helmet>
       <div className="bg-card p-12 rounded-3xl border border-gold/10 card-shadow text-center space-y-6">
         <div className="w-20 h-20 gold-gradient rounded-3xl flex items-center justify-center text-black mx-auto shadow-xl">
@@ -830,11 +823,28 @@ function AppContent() {
     window.scrollTo(0, 0);
   }, [location.pathname]);
 
-  const handleShare = async () => {
+  const handleShare = async (type: 'prices' | 'general' = 'prices') => {
+    let shareText = '';
+    
+    if (type === 'prices') {
+      let countryName = t(currency);
+      if (currency === 'YER') {
+        countryName = `${t('YER')} - ${t(yemenRegion.toLowerCase())}`;
+      }
+      
+      const formattedDate = lastUpdate.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
+      const formattedTime = lastUpdate.toLocaleTimeString(locale);
+      
+      const priceList = prices.map(p => `${p.type}: ${p.price.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`).join('\n');
+      shareText = `🌟 ${t('site_title')} 🌟\n\n${t('prices_in_country')} ${countryName}:\n${priceList}\n\n🕒 ${t('last_update')}: ${formattedDate} ${formattedTime}\n\n${t('footer_desc')}`;
+    } else {
+      shareText = `🌟 ${t('site_title')} 🌟\n\n${t('share_description')}\n\n${t('footer_desc')}`;
+    }
+    
     const shareData = {
-      title: 'أسعار الذهب المباشرة',
-      text: `🌟 المنصة الشاملة لأسعار الذهب المباشرة: بوصلتك في عالم الاستثمار 🌟\n\nهل تبحث عن مصدر موثوق وسريع لمتابعة أسعار الذهب لحظة بلحظة؟\nفي عالم تتسارع فيه التغيرات الاقتصادية، تعتبر منصتنا "أسعار الذهب المباشرة" أداتك الأقوى للبقاء في صدارة السوق. نحن لا نقدم لك مجرد أرقام، بل نضع بين يديك منصة متكاملة تجمع بين دقة البيانات، وسرعة التنبيهات، وعمق التحليل الاقتصادي.\n\n👇 لا تدع الفرصة تفوتك!\nقم بزيارة الموقع الآن، اشترك في القائمة البريدية، وفعّل الإشعارات لتكون أول من يعلم بتحركات السوق.\n`,
-      url: 'https://goldmonitor-1b4ce.web.app/'
+      title: t('site_title'),
+      text: shareText,
+      url: window.location.href
     };
 
     try {
@@ -974,7 +984,7 @@ function AppContent() {
                 <Link to="/news" className={location.pathname === '/news' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_news')}</Link>
                 <Link to="/tips" className={location.pathname === '/tips' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_tips')}</Link>
                 <Link to="/about" className={location.pathname === '/about' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_about')}</Link>
-                <button onClick={handleShare} className="text-gray-400 hover:text-primary flex items-center gap-1">
+                <button onClick={() => handleShare('general')} className="text-gray-400 hover:text-primary flex items-center gap-1">
                   <Share2 size={16} />
                   {t('share_app') || 'مشاركة'}
                 </button>
@@ -1004,7 +1014,7 @@ function AppContent() {
               <Link to="/tips" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_tips')}</Link>
               <Link to="/about" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_about')}</Link>
               <button 
-                onClick={() => { handleShare(); setIsMenuOpen(false); }} 
+                onClick={() => { handleShare('general'); setIsMenuOpen(false); }} 
                 className="flex items-center gap-2 text-gray-400 hover:text-primary text-right"
               >
                 <Share2 size={18} />
@@ -1069,7 +1079,7 @@ function AppContent() {
           </div>
         )}
         <Routes>
-          <Route path="/" element={<HomePage prices={prices} chartData={chartData} news={news} currency={currency} exchangeRates={exchangeRates} lastUpdate={lastUpdate} setCurrency={setCurrency} setLanguage={setLanguage} calcAmount={calcAmount} setCalcAmount={setCalcAmount} calcType={calcType} setCalcType={setCalcType} />} />
+          <Route path="/" element={<HomePage prices={prices} chartData={chartData} news={news} currency={currency} exchangeRates={exchangeRates} lastUpdate={lastUpdate} setCurrency={setCurrency} setLanguage={setLanguage} calcAmount={calcAmount} setCalcAmount={setCalcAmount} calcType={calcType} setCalcType={setCalcType} handleShare={handleShare} />} />
           <Route path="/charts" element={<ChartsPage chartData={chartData} currency={currency} setCurrency={setCurrency} language={language} setLanguage={setLanguage} />} />
           <Route path="/news" element={<NewsPage news={news} />} />
           <Route path="/tips" element={<TipsPage />} />

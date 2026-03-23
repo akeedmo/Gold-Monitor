@@ -382,14 +382,16 @@ async function fetchGoldPrices() {
         return;
       }
     } catch (error: any) {
-      if (error.response?.status === 403) {
-        console.warn(`Primary Gold API (goldapi.io) returned 403 Forbidden. This usually means the API key is invalid or quota exceeded. Falling back...`);
+      const status = error.response?.status || error.status;
+      if (status === 403) {
+        console.warn(`Primary Gold API (goldapi.io) returned 403 Forbidden. This usually means the API key is invalid, expired, or quota exceeded. Falling back...`);
       } else {
         console.warn(`Primary Gold API failed: ${error.message}. Falling back...`);
       }
     }
   }
 
+  // Secondary Fallback: gold-api.com
   try {
     const response = await axios.get("https://api.gold-api.com/price/XAU", { timeout: 5000 });
     if (response.data && response.data.price) {
@@ -398,7 +400,19 @@ async function fetchGoldPrices() {
       return;
     }
   } catch (error: any) {
-    console.warn(`Secondary Gold API failed: ${error.message}`);
+    console.warn(`Secondary Gold API failed: ${error.message}. Trying third fallback...`);
+  }
+
+  // Tertiary Fallback: metals.live (Free spot price)
+  try {
+    const response = await axios.get("https://api.metals.live/v1/spot/gold", { timeout: 5000 });
+    if (response.data && response.data[0] && response.data[0].price) {
+      const p24 = response.data[0].price / 31.1035;
+      await insertPrices(p24, p24 * (22/24), p24 * (21/24), p24 * (18/24));
+      return;
+    }
+  } catch (error: any) {
+    console.warn(`Tertiary Gold API failed: ${error.message}. Using mock data...`);
   }
 
   await insertMockData();
