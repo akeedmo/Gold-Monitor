@@ -1,0 +1,118 @@
+{
+  "entities": {
+    "Price": {
+      "title": "Price",
+      "description": "Gold prices for different karats",
+      "type": "object",
+      "properties": {
+        "price_24k": { "type": "number" },
+        "price_22k": { "type": "number" },
+        "price_21k": { "type": "number" },
+        "price_18k": { "type": "number" },
+        "currency": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["price_24k", "price_22k", "price_21k", "price_18k", "currency", "timestamp"]
+    },
+    "ExchangeRate": {
+      "title": "ExchangeRate",
+      "description": "Currency exchange rates relative to USD",
+      "type": "object",
+      "properties": {
+        "currency": { "type": "string" },
+        "rate": { "type": "number" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["currency", "rate", "updated_at"]
+    },
+    "News": {
+      "title": "News",
+      "description": "Gold market news items",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "link": { "type": "string" },
+        "pubDate": { "type": "string" },
+        "contentSnippet": { "type": "string" },
+        "source": { "type": "string" },
+        "likes": { "type": "integer" },
+        "views": { "type": "integer" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "link", "pubDate", "source", "timestamp"]
+    },
+    "Visit": {
+      "title": "Visit",
+      "description": "Website visit logs",
+      "type": "object",
+      "properties": {
+        "ip": { "type": "string" },
+        "user_agent": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ip", "user_agent", "timestamp"]
+    },
+    "Setting": {
+      "title": "Setting",
+      "description": "Application settings",
+      "type": "object",
+      "properties": {
+        "key": { "type": "string" },
+        "value": { "type": "string" }
+      },
+      "required": ["key", "value"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Sent push/email notifications",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "sent_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "message", "sent_at"]
+    },
+    "Subscriber": {
+      "title": "Subscriber",
+      "description": "Email newsletter subscribers",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "subscribed_at": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["active", "unsubscribed"] }
+      },
+      "required": ["email", "subscribed_at", "status"]
+    }
+  },
+  "firestore": {
+    "/prices": {
+      "schema": "Price",
+      "description": "Historical gold prices"
+    },
+    "/exchange_rates": {
+      "schema": "ExchangeRate",
+      "description": "Current exchange rates"
+    },
+    "/news": {
+      "schema": "News",
+      "description": "Market news articles"
+    },
+    "/visits": {
+      "schema": "Visit",
+      "description": "Traffic analytics"
+    },
+    "/settings": {
+      "schema": "Setting",
+      "description": "App configuration"
+    },
+    "/notifications": {
+      "schema": "Notification",
+      "description": "Notification history"
+    },
+    "/subscribers": {
+      "schema": "Subscriber",
+      "description": "Mailing list"
+    }
+  }
+}

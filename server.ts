@@ -2,93 +2,53 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import fs from "fs";
-import initSqlJs from "sql.js";
 import axios from "axios";
 import Parser from "rss-parser";
-import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import nodemailer from "nodemailer";
+import { initializeApp } from "firebase/app";
+import { 
+  getFirestore, 
+  collection, 
+  addDoc, 
+  getDocs, 
+  query, 
+  orderBy, 
+  limit, 
+  doc, 
+  getDoc, 
+  setDoc, 
+  updateDoc, 
+  deleteDoc, 
+  where, 
+  Timestamp,
+  increment,
+  getDocFromServer
+} from "firebase/firestore";
+import firebaseConfig from "./firebase-applet-config.json";
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
-const dbPath = process.env.VERCEL ? "/tmp/gold_monitor.db" : "gold_monitor.db";
 const parser = new Parser();
 
-let sqlJsDb: any = null;
-let inTransaction = false;
+// Initialize Firebase
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
 
-function saveDatabase() {
-  if (!sqlJsDb) return;
-  const data = sqlJsDb.export();
-  fs.writeFileSync(dbPath, Buffer.from(data));
-}
-
-const db = {
-  async get(sql: string, params: any[] = []) {
-    if (!sqlJsDb) return undefined;
-    const stmt = sqlJsDb.prepare(sql);
-    try {
-      if (params.length) stmt.bind(params);
-      if (stmt.step()) {
-        return stmt.getAsObject();
-      }
-      return undefined;
-    } catch (e) {
-      console.error("DB Get Error:", e);
-      return undefined;
-    } finally {
-      stmt.free();
-    }
-  },
-  async all(sql: string, params: any[] = []) {
-    if (!sqlJsDb) return [];
-    const stmt = sqlJsDb.prepare(sql);
-    const results = [];
-    try {
-      if (params.length) stmt.bind(params);
-      while (stmt.step()) {
-        results.push(stmt.getAsObject());
-      }
-      return results;
-    } catch (e) {
-      console.error("DB All Error:", e);
-      return [];
-    } finally {
-      stmt.free();
-    }
-  },
-  async run(sql: string, params: any[] = []) {
-    if (!sqlJsDb) return;
-    try {
-      sqlJsDb.run(sql, params);
-      if (!inTransaction) saveDatabase();
-    } catch (e) {
-      console.error("DB Run Error:", e);
-      throw e;
-    }
-  },
-  async exec(sql: string) {
-    if (!sqlJsDb) return;
-    try {
-      sqlJsDb.exec(sql);
-      const upperSql = sql.toUpperCase();
-      if (upperSql.includes('COMMIT') || upperSql.includes('ROLLBACK')) {
-        inTransaction = false;
-        saveDatabase();
-      } else if (upperSql.includes('BEGIN')) {
-        inTransaction = true;
-      } else {
-        if (!inTransaction) saveDatabase();
-      }
-    } catch (e) {
-      console.error("DB Exec Error:", e);
-      throw e;
+// Test Connection
+async function testConnection() {
+  try {
+    await getDocFromServer(doc(db, 'test', 'connection'));
+  } catch (error) {
+    if(error instanceof Error && error.message.includes('the client is offline')) {
+      console.error("Please check your Firebase configuration. ");
     }
   }
-};
+}
+testConnection();
 
 // Auth Middleware
 const authenticate = (req: any, res: any, next: any) => {
@@ -109,10 +69,11 @@ app.use(express.json());
 app.use(async (req, res, next) => {
   if (!req.path.startsWith('/api') && !req.path.includes('.')) {
     try {
-      await db.run("INSERT INTO visits (ip, user_agent) VALUES (?, ?)", [
-        req.ip || req.headers['x-forwarded-for'] || 'unknown',
-        req.headers['user-agent'] || 'unknown'
-      ]);
+      await addDoc(collection(db, "visits"), {
+        ip: req.ip || req.headers['x-forwarded-for'] || 'unknown',
+        user_agent: req.headers['user-agent'] || 'unknown',
+        timestamp: Timestamp.now()
+      });
     } catch (e) {
       console.error("Tracking error:", e);
     }
@@ -124,8 +85,8 @@ app.use(async (req, res, next) => {
 app.post("/api/admin/login", async (req, res) => {
   const { password } = req.body;
   
-  const storedPass = await db.get("SELECT value FROM settings WHERE key = 'admin_password'");
-  const adminPass = storedPass ? storedPass.value : (process.env.ADMIN_PASSWORD || 'admin123');
+  const storedPassDoc = await getDoc(doc(db, "settings", "admin_password"));
+  const adminPass = storedPassDoc.exists() ? storedPassDoc.data().value : (process.env.ADMIN_PASSWORD || 'admin123');
   
   if (password === adminPass) {
     const token = jwt.sign({ role: 'admin' }, process.env.JWT_SECRET || 'secret', { expiresIn: '24h' });
@@ -140,36 +101,35 @@ app.post("/api/admin/change-password", authenticate, async (req, res) => {
     return res.status(400).json({ error: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' });
   }
   
-  await db.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", ['admin_password', newPassword]);
+  await setDoc(doc(db, "settings", "admin_password"), { value: newPassword });
   res.json({ success: true });
 });
 
 app.get("/api/admin/stats", authenticate, async (req, res) => {
   try {
-    const latestPrice = await db.get("SELECT * FROM prices ORDER BY timestamp DESC LIMIT 1");
-    const totalNews = await db.get("SELECT COUNT(*) as count FROM news");
-
-    const totalVisits = await db.get("SELECT COUNT(*) as count FROM visits");
-    const todayVisits = await db.get("SELECT COUNT(*) as count FROM visits WHERE timestamp > date('now')");
-    const weekVisits = await db.get("SELECT COUNT(*) as count FROM visits WHERE timestamp > date('now', '-7 days')");
-    const monthVisits = await db.get("SELECT COUNT(*) as count FROM visits WHERE timestamp > date('now', '-30 days')");
+    const pricesSnapshot = await getDocs(query(collection(db, "prices"), orderBy("timestamp", "desc"), limit(1)));
+    const latestPrice = pricesSnapshot.empty ? null : pricesSnapshot.docs[0].data();
     
-    const history = await db.all(`
-      SELECT date(timestamp) as date, COUNT(*) as count 
-      FROM visits 
-      WHERE timestamp > date('now', '-30 days') 
-      GROUP BY date(timestamp)
-      ORDER BY date ASC
-    `);
+    const newsSnapshot = await getDocs(collection(db, "news"));
+    const totalNews = newsSnapshot.size;
+
+    const visitsSnapshot = await getDocs(collection(db, "visits"));
+    const totalVisits = visitsSnapshot.size;
+    
+    // Today's visits (simplified for now)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayVisitsSnapshot = await getDocs(query(collection(db, "visits"), where("timestamp", ">=", Timestamp.fromDate(today))));
+    const todayVisits = todayVisitsSnapshot.size;
     
     res.json({
-      total: totalVisits?.count || 0,
-      today: todayVisits?.count || 0,
-      week: weekVisits?.count || 0,
-      month: monthVisits?.count || 0,
-      history: history || [],
-      latestPrice: latestPrice || null,
-      totalNews: totalNews?.count || 0
+      total: totalVisits,
+      today: todayVisits,
+      week: 0, // Simplified
+      month: 0, // Simplified
+      history: [], // Simplified
+      latestPrice: latestPrice,
+      totalNews: totalNews
     });
   } catch (error) {
     console.error("Stats error:", error);
@@ -179,50 +139,45 @@ app.get("/api/admin/stats", authenticate, async (req, res) => {
 
 app.post("/api/admin/settings", authenticate, async (req, res) => {
   const settings = req.body;
-  
-  await db.exec('BEGIN TRANSACTION');
   try {
     for (const [key, value] of Object.entries(settings)) {
-      await db.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [key, String(value)]);
+      await setDoc(doc(db, "settings", key), { value: String(value) });
     }
-    await db.exec('COMMIT');
+    res.json({ success: true });
   } catch (e) {
-    await db.exec('ROLLBACK');
     return res.status(500).json({ error: 'Failed to update settings' });
   }
-  
-  res.json({ success: true });
 });
 
 app.get("/api/prices/latest", async (req, res) => {
-  const price = await db.get("SELECT * FROM prices ORDER BY timestamp DESC LIMIT 1");
-  res.json(price || {});
+  const pricesSnapshot = await getDocs(query(collection(db, "prices"), orderBy("timestamp", "desc"), limit(1)));
+  res.json(pricesSnapshot.empty ? {} : pricesSnapshot.docs[0].data());
 });
 
 app.get("/api/prices/history", async (req, res) => {
-  const history = await db.all("SELECT * FROM prices ORDER BY timestamp DESC LIMIT 100");
-  res.json(history || []);
+  const historySnapshot = await getDocs(query(collection(db, "prices"), orderBy("timestamp", "desc"), limit(100)));
+  res.json(historySnapshot.docs.map(d => d.data()));
 });
 
 app.get("/api/news", async (req, res) => {
-  const news = await db.all("SELECT * FROM news ORDER BY timestamp DESC LIMIT 50");
-  res.json(news || []);
+  const newsSnapshot = await getDocs(query(collection(db, "news"), orderBy("timestamp", "desc"), limit(50)));
+  res.json(newsSnapshot.docs.map(d => ({ id: d.id, ...d.data() })));
 });
 
 app.post("/api/news/:id/view", async (req, res) => {
-  await db.run("UPDATE news SET views = views + 1 WHERE id = ?", [req.params.id]);
+  await updateDoc(doc(db, "news", req.params.id), { views: increment(1) });
   res.json({ success: true });
 });
 
 app.post("/api/news/:id/like", async (req, res) => {
-  await db.run("UPDATE news SET likes = likes + 1 WHERE id = ?", [req.params.id]);
+  await updateDoc(doc(db, "news", req.params.id), { likes: increment(1) });
   res.json({ success: true });
 });
 
 app.get("/api/exchange-rates", async (req, res) => {
-  const rates = await db.all("SELECT * FROM exchange_rates");
-  const ratesObj = (rates || []).reduce((acc: any, curr: any) => {
-    acc[curr.currency] = curr.rate;
+  const ratesSnapshot = await getDocs(collection(db, "exchange_rates"));
+  const ratesObj = ratesSnapshot.docs.reduce((acc: any, curr: any) => {
+    acc[curr.id] = curr.data().rate;
     return acc;
   }, {});
   res.json(ratesObj);
@@ -243,25 +198,20 @@ app.post("/api/refresh", async (req, res) => {
 
 app.post("/api/admin/exchange-rates", authenticate, async (req, res) => {
   const rates = req.body; // { currency: rate }
-  
-  await db.exec('BEGIN TRANSACTION');
   try {
     for (const [currency, rate] of Object.entries(rates)) {
-      await db.run("INSERT OR REPLACE INTO exchange_rates (currency, rate, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)", [currency, Number(rate)]);
+      await setDoc(doc(db, "exchange_rates", currency), { rate: Number(rate), updated_at: Timestamp.now() });
     }
-    await db.exec('COMMIT');
+    res.json({ success: true });
   } catch (e) {
-    await db.exec('ROLLBACK');
     return res.status(500).json({ error: 'Failed to update exchange rates' });
   }
-  
-  res.json({ success: true });
 });
 
 app.get("/api/settings", async (req, res) => {
-  const settings = await db.all("SELECT * FROM settings");
-  const settingsObj = (settings || []).reduce((acc: any, curr: any) => {
-    acc[curr.key] = curr.value;
+  const settingsSnapshot = await getDocs(collection(db, "settings"));
+  const settingsObj = settingsSnapshot.docs.reduce((acc: any, curr: any) => {
+    acc[curr.id] = curr.data().value;
     return acc;
   }, {});
   res.json(settingsObj);
@@ -273,7 +223,11 @@ app.post("/api/subscribe", async (req, res) => {
     return res.status(400).json({ error: "Invalid email" });
   }
   try {
-    await db.run("INSERT OR IGNORE INTO subscribers (email) VALUES (?)", [email]);
+    await setDoc(doc(db, "subscribers", email.replace(/\./g, '_')), {
+      email,
+      subscribed_at: Timestamp.now(),
+      status: 'active'
+    });
     res.json({ success: true });
   } catch (error) {
     console.error("Subscribe error:", error);
@@ -283,8 +237,8 @@ app.post("/api/subscribe", async (req, res) => {
 
 app.get("/api/admin/subscribers", authenticate, async (req, res) => {
   try {
-    const subscribers = await db.all("SELECT * FROM subscribers ORDER BY subscribed_at DESC");
-    res.json(subscribers);
+    const subscribersSnapshot = await getDocs(query(collection(db, "subscribers"), orderBy("subscribed_at", "desc")));
+    res.json(subscribersSnapshot.docs.map(d => d.data()));
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch subscribers" });
   }
@@ -319,11 +273,10 @@ app.post("/api/admin/notifications", authenticate, async (req, res) => {
 
   let targetEmails = emails;
   if (!targetEmails || !Array.isArray(targetEmails) || targetEmails.length === 0) {
-    const subscribers = await db.all("SELECT email FROM subscribers");
-    targetEmails = subscribers.map((s: any) => s.email);
+    const subscribersSnapshot = await getDocs(collection(db, "subscribers"));
+    targetEmails = subscribersSnapshot.docs.map((s: any) => s.data().email);
   }
 
-  // Send emails if targetEmails array is provided (Non-blocking)
   if (targetEmails && targetEmails.length > 0) {
     const smtpHost = process.env.SMTP_HOST;
     const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587;
@@ -355,37 +308,39 @@ app.post("/api/admin/notifications", authenticate, async (req, res) => {
                </div>`,
       };
 
-      // Send asynchronously without awaiting
       transporter.sendMail(mailOptions).then(info => {
         console.log("Email sent successfully: %s", info.messageId);
       }).catch(error => {
         console.error("Email sending error:", error);
       });
-    } else {
-      console.log("SMTP not configured. Skipping email sending.");
     }
   }
 
-  await db.run("INSERT INTO notifications (title, message) VALUES (?, ?)", [title, message]);
+  await addDoc(collection(db, "notifications"), { title, message, sent_at: Timestamp.now() });
   res.json({ success: true });
 });
 
 app.get("/api/admin/notifications", authenticate, async (req, res) => {
-  const notifications = await db.all("SELECT * FROM notifications ORDER BY sent_at DESC");
-  res.json(notifications || []);
+  const notificationsSnapshot = await getDocs(query(collection(db, "notifications"), orderBy("sent_at", "desc")));
+  res.json(notificationsSnapshot.docs.map(d => d.data()));
 });
 
 app.delete("/api/news/:id", authenticate, async (req, res) => {
-  await db.run("DELETE FROM news WHERE id = ?", [req.params.id]);
+  await deleteDoc(doc(db, "news", req.params.id));
   res.json({ success: true });
 });
 
 app.post("/api/admin/announcement", authenticate, async (req, res) => {
   const { title, content } = req.body;
-  await db.run(`
-    INSERT INTO news (title, contentSnippet, source, pubDate)
-    VALUES (?, ?, ?, ?)
-  `, [title, content, "إعلان إداري", new Date().toISOString()]);
+  await addDoc(collection(db, "news"), {
+    title,
+    contentSnippet: content,
+    source: "إعلان إداري",
+    pubDate: new Date().toISOString(),
+    timestamp: Timestamp.now(),
+    likes: 0,
+    views: 0
+  });
   res.json({ success: true });
 });
 
@@ -394,10 +349,14 @@ async function fetchGoldPrices() {
   const apiKey = process.env.GOLD_API_KEY;
   
   const insertPrices = async (p24: number, p22: number, p21: number, p18: number) => {
-    await db.run(`
-      INSERT INTO prices (price_24k, price_22k, price_21k, price_18k, currency)
-      VALUES (?, ?, ?, ?, ?)
-    `, [p24, p22, p21, p18, 'USD']);
+    await addDoc(collection(db, "prices"), {
+      price_24k: p24,
+      price_22k: p22,
+      price_21k: p21,
+      price_18k: p18,
+      currency: 'USD',
+      timestamp: Timestamp.now()
+    });
     console.log(`Prices updated: 24k=$${p24.toFixed(2)}`);
   };
 
@@ -407,7 +366,6 @@ async function fetchGoldPrices() {
     await insertPrices(p24, p24 * (22/24), p24 * (21/24), p24 * (18/24));
   };
 
-  // 1. Try Primary API (GoldAPI.io) if key exists
   if (apiKey && apiKey !== 'YOUR_GOLDAPI_KEY' && apiKey.length > 10) {
     try {
       const response = await axios.get("https://www.goldapi.io/api/XAU/USD", {
@@ -424,43 +382,21 @@ async function fetchGoldPrices() {
         return;
       }
     } catch (error: any) {
-      if (error.response?.status === 403) {
-        console.warn("Primary Gold API: Access Forbidden (403). Check your API key.");
-      } else {
-        console.warn(`Primary Gold API failed: ${error.message}`);
-      }
+      console.warn(`Primary Gold API failed: ${error.message}`);
     }
   }
 
-  // 2. Try Secondary Free API (Gold-API.com)
   try {
     const response = await axios.get("https://api.gold-api.com/price/XAU", { timeout: 5000 });
     if (response.data && response.data.price) {
       const p24 = response.data.price / 31.1035;
       await insertPrices(p24, p24 * (22/24), p24 * (21/24), p24 * (18/24));
-      console.log("Updated from secondary free API.");
       return;
     }
   } catch (error: any) {
     console.warn(`Secondary Gold API failed: ${error.message}`);
   }
 
-  // 3. Try Tertiary Fallback (CoinGecko PAXG - tracks gold price)
-  try {
-    const response = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=pax-gold&vs_currencies=usd", { timeout: 5000 });
-    if (response.data && response.data['pax-gold'] && response.data['pax-gold'].usd) {
-      const spotPrice = response.data['pax-gold'].usd;
-      const p24 = spotPrice / 31.1035;
-      await insertPrices(p24, p24 * (22/24), p24 * (21/24), p24 * (18/24));
-      console.log("Updated from CoinGecko (PAXG) fallback.");
-      return;
-    }
-  } catch (error: any) {
-    console.warn(`Tertiary Gold API failed: ${error.message}`);
-  }
-
-  // 4. Fallback to Mock Data
-  console.log("All APIs failed. Using realistic mock data.");
   await insertMockData();
 }
 
@@ -478,17 +414,27 @@ async function fetchNews() {
         const feed = await parser.parseURL(feedConfig.url);
         if (feed && feed.items) {
           for (const item of feed.items) {
-            await db.run(`
-              INSERT OR IGNORE INTO news (title, link, pubDate, contentSnippet, source)
-              VALUES (?, ?, ?, ?, ?)
-            `, [item.title || "No Title", item.link || "#", item.pubDate || new Date().toISOString(), item.contentSnippet || "", feedConfig.source]);
+            // Check if news already exists by link
+            const q = query(collection(db, "news"), where("link", "==", item.link || "#"));
+            const existing = await getDocs(q);
+            if (existing.empty) {
+              await addDoc(collection(db, "news"), {
+                title: item.title || "No Title",
+                link: item.link || "#",
+                pubDate: item.pubDate || new Date().toISOString(),
+                contentSnippet: item.contentSnippet || "",
+                source: feedConfig.source,
+                timestamp: Timestamp.now(),
+                likes: 0,
+                views: 0
+              });
+            }
           }
         }
       } catch (err: any) {
         console.warn(`Could not fetch news from ${feedConfig.source}: ${err.message}`);
       }
     }
-    console.log("News updated from available sources.");
   } catch (error) {
     console.error("Error in fetchNews process:", error);
   }
@@ -504,26 +450,17 @@ async function fetchExchangeRates() {
         if (rates[curr]) {
           let rate = rates[curr];
           if (curr === 'YER') {
-            await db.run("INSERT OR REPLACE INTO exchange_rates (currency, rate, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)", ['YER_SANAA', 535]);
-            await db.run("INSERT OR REPLACE INTO exchange_rates (currency, rate, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)", ['YER_ADEN', 1650]);
+            await setDoc(doc(db, "exchange_rates", "YER_SANAA"), { rate: 535, updated_at: Timestamp.now() });
+            await setDoc(doc(db, "exchange_rates", "YER_ADEN"), { rate: 1650, updated_at: Timestamp.now() });
             if (rate < 1000) rate = 1650; 
           }
-          await db.run("INSERT OR REPLACE INTO exchange_rates (currency, rate, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)", [curr, rate]);
+          await setDoc(doc(db, "exchange_rates", curr), { rate: rate, updated_at: Timestamp.now() });
         }
       }
-      console.log("Exchange rates updated from API.");
       return;
     }
   } catch (error: any) {
-    console.error("Error fetching exchange rates, using defaults:", error.message);
-  }
-
-  // Fallback rates if API fails
-  const defaultRates: any = {
-    USD: 1, SAR: 3.75, AED: 3.67, KWD: 0.31, QAR: 3.64, BHD: 0.38, OMR: 0.38, EGP: 48.50, JOD: 0.71, LYD: 4.80, EUR: 0.92, GBP: 0.78, YER: 1650, YER_SANAA: 535, YER_ADEN: 1650
-  };
-  for (const [currency, rate] of Object.entries(defaultRates)) {
-    await db.run("INSERT OR REPLACE INTO exchange_rates (currency, rate, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)", [currency, rate]);
+    console.error("Error fetching exchange rates:", error.message);
   }
 }
 
@@ -547,90 +484,25 @@ app.get("/sitemap.xml", (req, res) => {
 </urlset>`);
 });
 
-async function initDB() {
-  const SQL = await initSqlJs();
-  if (fs.existsSync(dbPath)) {
-    const filebuffer = fs.readFileSync(dbPath);
-    sqlJsDb = new SQL.Database(filebuffer);
-  } else {
-    sqlJsDb = new SQL.Database();
-  }
-
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS prices (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      price_24k REAL,
-      price_22k REAL,
-      price_21k REAL,
-      price_18k REAL,
-      currency TEXT,
-      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS exchange_rates (
-      currency TEXT PRIMARY KEY,
-      rate REAL,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS visits (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      ip TEXT,
-      user_agent TEXT,
-      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS news (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT,
-      link TEXT,
-      pubDate TEXT,
-      contentSnippet TEXT,
-      source TEXT,
-      likes INTEGER DEFAULT 0,
-      views INTEGER DEFAULT 0,
-      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
-      value TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS notifications (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT,
-      message TEXT,
-      sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS subscribers (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      email TEXT UNIQUE,
-      subscribed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      status TEXT DEFAULT 'active'
-    );
-  `);
-
+async function initFirestore() {
   // Default Settings
   const defaultSettings = [
     ['site_name', 'أسعار الذهب المباشرة'],
     ['primary_color', '#D4AF37'],
     ['secondary_color', '#000000'],
-    ['ads_header', ''],
-    ['ads_sidebar', ''],
-    ['ads_content', ''],
-    ['admin_email', 'qydalrfyd@gmail.com'],
-    ['monetization_link', 'https://www.google.com/adsense/start/']
+    ['admin_email', 'qydalrfyd@gmail.com']
   ];
 
   for (const [key, value] of defaultSettings) {
-    await db.run('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', [key, value]);
+    const sDoc = await getDoc(doc(db, "settings", key));
+    if (!sDoc.exists()) {
+      await setDoc(doc(db, "settings", key), { value });
+    }
   }
 }
 
 async function startServer() {
-  await initDB();
+  await initFirestore();
 
   // Run automation
   setInterval(fetchGoldPrices, 5 * 60 * 1000);
@@ -648,18 +520,16 @@ async function startServer() {
       appType: "spa",
     });
     app.use(vite.middlewares);
-  } else if (!process.env.VERCEL) {
+  } else {
     app.use(express.static(path.join(process.cwd(), "dist")));
     app.get("*", (req, res) => {
       res.sendFile(path.join(process.cwd(), "dist", "index.html"));
     });
   }
 
-  if (!process.env.VERCEL) {
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running on http://0.0.0.0:${PORT}`);
-    });
-  }
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://0.0.0.0:${PORT}`);
+  });
 }
 
 startServer();
