@@ -9,7 +9,9 @@
     "rewrites": [
       {
         "source": "**",
-        "destination": "/index.html"
+        "run": {
+          "serviceId": "goldmonitor"
+        }
       }
     ]
   },
