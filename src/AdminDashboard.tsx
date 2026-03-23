@@ -96,11 +96,11 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   }, []);
 
   const handleGoogleLogin = async () => {
-    setLoading(true);
-    setError('');
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
+      setLoading(true);
+      setError('');
     } catch (err: any) {
       if (err.code === 'auth/popup-closed-by-user') {
         console.log('User closed the login popup');

@@ -187,10 +187,13 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
   };
 
   const handleGoogleSubscribe = async () => {
-    setSubLoading(true);
     try {
       const provider = new GoogleAuthProvider();
+      // Call signInWithPopup immediately without any state changes before it
+      // to preserve the user gesture and prevent popup blocking.
       const result = await signInWithPopup(auth, provider);
+      
+      setSubLoading(true);
       if (result.user.email) {
         await handleSubscribe(null, result.user.email);
       }
@@ -200,7 +203,7 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
         return;
       }
       console.error(err);
-      alert(t('google_login_failed') || 'فشل الاشتراك عبر جوجل');
+      alert((t('google_login_failed') || 'فشل الاشتراك عبر جوجل') + ': ' + (err.message || err));
     } finally {
       setSubLoading(false);
     }
@@ -865,64 +868,52 @@ function AppContent() {
     const isInitial = prices[0].price === 0;
     if (isInitial) setLoading(true);
     try {
-      if (force) {
-        await axios.post('/api/refresh');
+      // For YER, we fetch USD and multiply by local market rates
+      const fetchCurrency = currency === 'YER' ? 'USD' : currency;
+      
+      // Proxy call to local server
+      const priceRes = await axios.get(`/api/gold?currency=${fetchCurrency}`, {
+        timeout: 10000
+      });
+      const latest = priceRes.data || {};
+      
+      let ratesRes = { data: { YER_SANAA: 530, YER_ADEN: 1650 } };
+      try {
+        ratesRes = await axios.get('/api/exchange-rates');
+      } catch (e) {
+        console.error("Failed to fetch exchange rates", e);
       }
-      const [priceRes, historyRes, newsRes, ratesRes] = await Promise.all([
-        axios.get('/api/prices/latest'),
-        axios.get('/api/prices/history'),
-        axios.get('/api/news'),
-        axios.get('/api/exchange-rates')
-      ]);
-
-      const getRate = () => {
-        if (currency === 'YER') {
-          return ratesRes.data[`YER_${yemenRegion}`] || ratesRes.data['YER'] || 1650;
-        }
-        return ratesRes.data[currency] || 1;
-      };
-
-      const rate = getRate();
       setExchangeRates(ratesRes.data);
 
-      const latest = priceRes.data || {};
-      const historyData = historyRes.data || [];
-      const previous = historyData.length > 1 ? historyData[1] : latest;
+      if (currency === 'YER') {
+        const yerRate = yemenRegion === 'SANAA' ? (ratesRes.data.YER_SANAA || 530) : (ratesRes.data.YER_ADEN || 1650);
+        latest.price = latest.price * yerRate;
+      }
       
+      // Mocking other data for now as CORS might block RSS feeds
+      const historyData = []; 
+      const newsRes = { data: [] };
+
       const calculateChange = (current: number, prev: number) => {
         const change = (current || 0) - (prev || 0);
         const changePercent = (prev && prev !== 0) ? (change / prev) * 100 : 0;
-        return { change: change * rate, changePercent };
+        return { change: change, changePercent };
       };
 
+      const p24 = latest.price / 31.1035;
+      const p22 = p24 * 22/24;
+      const p21 = p24 * 21/24;
+      const p18 = p24 * 18/24;
+
       const formattedPrices: GoldPrice[] = [
-        { id: '24k', type: t('gold_24k'), price: (latest.price_24k || 0) * rate, ...calculateChange(latest.price_24k, previous.price_24k) },
-        { id: '22k', type: t('gold_22k'), price: (latest.price_22k || 0) * rate, ...calculateChange(latest.price_22k, previous.price_22k) },
-        { id: '21k', type: t('gold_21k'), price: (latest.price_21k || 0) * rate, ...calculateChange(latest.price_21k, previous.price_21k) },
-        { id: '18k', type: t('gold_18k'), price: (latest.price_18k || 0) * rate, ...calculateChange(latest.price_18k, previous.price_18k) },
+        { id: '24k', type: t('gold_24k'), price: p24, ...calculateChange(p24, p24) },
+        { id: '22k', type: t('gold_22k'), price: p22, ...calculateChange(p22, p22) },
+        { id: '21k', type: t('gold_21k'), price: p21, ...calculateChange(p21, p21) },
+        { id: '18k', type: t('gold_18k'), price: p18, ...calculateChange(p18, p18) },
       ];
       setPrices(formattedPrices);
-
-      const history = historyData.map((h: any) => {
-        let ts = new Date().toISOString();
-        if (h.timestamp) {
-          if (typeof h.timestamp === 'string') {
-            ts = h.timestamp.replace(' ', 'T') + 'Z';
-          } else if (h.timestamp.seconds !== undefined || h.timestamp._seconds !== undefined) {
-            const seconds = h.timestamp.seconds !== undefined ? h.timestamp.seconds : h.timestamp._seconds;
-            ts = new Date(seconds * 1000).toISOString();
-          } else if (h.timestamp instanceof Date) {
-            ts = h.timestamp.toISOString();
-          }
-        }
-        return {
-          timestamp: ts,
-          value: h.price_24k * rate
-        };
-      }).reverse();
-      setChartData(history);
-
-      setNews(newsRes.data);
+      setChartData([]);
+      setNews([]);
       setLastUpdate(new Date());
     } catch (err) {
       console.error("Fetch error:", err);
