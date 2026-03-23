@@ -22,7 +22,8 @@ import {
   Menu,
   X,
   RefreshCw,
-  Globe
+  Globe,
+  Key
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -38,7 +39,7 @@ import axios from 'axios';
 import { useTranslation } from './i18n';
 import { auth, db } from './firebase';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 interface Stats {
   total: number;
@@ -58,6 +59,8 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [settings, setSettings] = useState<any>({});
   const [exchangeRates, setExchangeRates] = useState<any>({});
+  const [apiKeys, setApiKeys] = useState({ activeKey: '', pendingKeys: [] as string[], expiredKeys: [] as string[] });
+  const [newApiKey, setNewApiKey] = useState('');
   const [news, setNews] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('overview');
@@ -132,11 +135,16 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     setLoading(true);
     setError('');
     try {
-      const res = await axios.post('/api/admin/login', { password });
-      localStorage.setItem('admin_token', res.data.token);
-      setToken(res.data.token);
+      // Mock login for Firebase Hosting
+      if (password === 'admin123') { // Simple mock password
+        const mockToken = 'mock_token_' + Date.now();
+        localStorage.setItem('admin_token', mockToken);
+        setToken(mockToken);
+      } else {
+        throw new Error('Invalid password');
+      }
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Login failed');
+      setError(err.message || 'Login failed');
     } finally {
       setLoading(false);
     }
@@ -165,24 +173,56 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   const fetchData = async () => {
     if (!token) return;
     try {
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-      const [statsRes, settingsRes, newsRes, notifRes, ratesRes, subsRes] = await Promise.all([
-        axios.get('/api/admin/stats', config),
-        axios.get('/api/settings'),
-        axios.get('/api/news'),
-        axios.get('/api/admin/notifications', config),
-        axios.get('/api/exchange-rates'),
-        axios.get('/api/admin/subscribers', config)
-      ]);
+      // Mock data for Firebase Hosting since there is no backend
+      const statsRes = { data: { total: 1500, today: 120, week: 800, month: 3000, history: [], latestPrice: { price: 2500 }, totalNews: 45 } };
+      
+      let settingsRes = { data: { siteName: "مراقب الذهب", contactEmail: "qydalrfyd@gmail.com", maintenanceMode: false } };
+      try {
+        const settingsDoc = await getDoc(doc(db, 'settings', 'general'));
+        if (settingsDoc.exists()) {
+          settingsRes.data = { ...settingsRes.data, ...settingsDoc.data() };
+        }
+      } catch (e) {
+        console.error("Failed to fetch settings from Firestore", e);
+      }
+
+      const newsRes = { data: [] };
+      const notifRes = { data: [] };
+      const subsRes = { data: [] };
+      
+      let ratesData = { YER_SANAA: 530, YER_ADEN: 1650 };
+      try {
+        const ratesDoc = await getDoc(doc(db, 'settings', 'exchangeRates'));
+        if (ratesDoc.exists()) {
+          ratesData = ratesDoc.data() as any;
+        }
+      } catch (e) {
+        console.error("Failed to fetch exchange rates from Firestore", e);
+      }
+
+      let apiKeysData = { activeKey: '', pendingKeys: [] as string[], expiredKeys: [] as string[] };
+      try {
+        const keysDoc = await getDoc(doc(db, 'settings', 'apiKeys'));
+        if (keysDoc.exists()) {
+          apiKeysData = keysDoc.data() as any;
+        } else {
+          apiKeysData = { activeKey: "1bda868b4ac2385f9e5ceb205450a0f8", pendingKeys: [], expiredKeys: [] };
+        }
+      } catch (e) {
+        console.error("Failed to fetch api keys from Firestore", e);
+      }
+
       setStats(statsRes.data);
       setSettings(settingsRes.data);
       setNews(newsRes.data);
       setNotifications(notifRes.data);
-      setExchangeRates(ratesRes.data);
+      setExchangeRates(ratesData);
+      setApiKeys(apiKeysData);
       setSubscribers(subsRes.data);
     } catch (err) {
-      localStorage.removeItem('admin_token');
-      setToken(null);
+      console.error("fetchData error:", err);
+      // localStorage.removeItem('admin_token');
+      // setToken(null);
     }
   };
 
@@ -194,9 +234,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     setSaveLoading(true);
     setError('');
     try {
-      await axios.post('/api/admin/settings', settings, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await setDoc(doc(db, 'settings', 'general'), settings);
       showSuccess(t('success_settings_saved'));
     } catch (err) {
       setError(t('error_settings_save_failed'));
@@ -209,12 +247,45 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     setSaveLoading(true);
     setError('');
     try {
-      await axios.post('/api/admin/exchange-rates', exchangeRates, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await setDoc(doc(db, 'settings', 'exchangeRates'), exchangeRates);
       showSuccess(t('success_rates_saved'));
     } catch (err) {
       setError(t('error_rates_save_failed'));
+    } finally {
+      setSaveLoading(false);
+    }
+  };
+
+  const handleAddApiKey = () => {
+    if (!newApiKey.trim()) return;
+    setApiKeys(prev => ({
+      ...prev,
+      pendingKeys: [...(prev.pendingKeys || []), newApiKey.trim()]
+    }));
+    setNewApiKey('');
+  };
+
+  const handleSwitchKey = () => {
+    setApiKeys(prev => {
+      const newExpired = prev.activeKey ? [...(prev.expiredKeys || []), prev.activeKey] : (prev.expiredKeys || []);
+      const newActive = (prev.pendingKeys && prev.pendingKeys.length > 0) ? prev.pendingKeys[0] : '';
+      const newPending = (prev.pendingKeys && prev.pendingKeys.length > 0) ? prev.pendingKeys.slice(1) : [];
+      return {
+        activeKey: newActive,
+        pendingKeys: newPending,
+        expiredKeys: newExpired
+      };
+    });
+  };
+
+  const handleSaveApiKeys = async () => {
+    setSaveLoading(true);
+    setError('');
+    try {
+      await setDoc(doc(db, 'settings', 'apiKeys'), apiKeys);
+      showSuccess(t('success_settings_saved') || 'تم حفظ المفاتيح بنجاح');
+    } catch (err) {
+      setError(t('error_settings_save_failed') || 'فشل حفظ المفاتيح');
     } finally {
       setSaveLoading(false);
     }
@@ -820,6 +891,95 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                   {saveLoading ? <RefreshCw className="animate-spin" size={20} /> : <Save size={20} />}
                   {saveLoading ? t('saving') : t('save_all_settings')}
                 </button>
+              </div>
+
+              <div className="lg:col-span-2 bg-card p-8 rounded-2xl border border-gold/10 shadow-lg space-y-6 mt-8">
+                <h3 className="text-lg font-bold flex items-center gap-2 text-white">
+                  <Key size={20} className="text-primary" />
+                  إدارة مفاتيح API (MetalPrice)
+                </h3>
+                
+                <div className="space-y-4">
+                  <div className="bg-white/5 p-4 rounded-xl border border-white/10">
+                    <p className="text-sm text-gray-400 mb-2">المفتاح النشط حالياً:</p>
+                    <div className="flex items-center justify-between gap-4">
+                      <code className="text-primary font-mono bg-black/50 px-3 py-2 rounded-lg flex-1 overflow-x-auto">
+                        {apiKeys.activeKey || 'لا يوجد مفتاح نشط'}
+                      </code>
+                      <button 
+                        onClick={handleSwitchKey}
+                        className="bg-red-500/20 text-red-500 hover:bg-red-500/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors whitespace-nowrap"
+                      >
+                        إلغاء وتفعيل التالي
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-white/5 p-4 rounded-xl border border-white/10">
+                    <p className="text-sm text-gray-400 mb-2">إضافة مفتاح جديد (احتياطي):</p>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        value={newApiKey}
+                        onChange={(e) => setNewApiKey(e.target.value)}
+                        placeholder="أدخل مفتاح API جديد..."
+                        className="flex-1 bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary transition-colors"
+                      />
+                      <button 
+                        onClick={handleAddApiKey}
+                        className="bg-primary/20 text-primary hover:bg-primary/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors"
+                      >
+                        إضافة
+                      </button>
+                    </div>
+                  </div>
+
+                  {apiKeys.pendingKeys && apiKeys.pendingKeys.length > 0 && (
+                    <div className="bg-white/5 p-4 rounded-xl border border-white/10">
+                      <p className="text-sm text-gray-400 mb-2">المفاتيح الاحتياطية ({apiKeys.pendingKeys.length}):</p>
+                      <ul className="space-y-2">
+                        {apiKeys.pendingKeys.map((key, idx) => (
+                          <li key={idx} className="flex items-center justify-between text-sm bg-black/30 px-3 py-2 rounded-lg">
+                            <code className="text-gray-300 font-mono">{key}</code>
+                            <button 
+                              onClick={() => {
+                                setApiKeys(prev => ({
+                                  ...prev,
+                                  pendingKeys: prev.pendingKeys.filter((_, i) => i !== idx)
+                                }));
+                              }}
+                              className="text-red-400 hover:text-red-300"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {apiKeys.expiredKeys && apiKeys.expiredKeys.length > 0 && (
+                    <div className="bg-white/5 p-4 rounded-xl border border-white/10 opacity-70">
+                      <p className="text-sm text-gray-400 mb-2">المفاتيح المنتهية ({apiKeys.expiredKeys.length}):</p>
+                      <ul className="space-y-2">
+                        {apiKeys.expiredKeys.map((key, idx) => (
+                          <li key={idx} className="text-sm bg-black/30 px-3 py-2 rounded-lg">
+                            <code className="text-gray-500 font-mono line-through">{key}</code>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <button 
+                    onClick={handleSaveApiKeys} 
+                    disabled={saveLoading} 
+                    className="w-full py-3 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 mt-4"
+                  >
+                    {saveLoading ? <RefreshCw className="animate-spin" size={18} /> : <Save size={18} />}
+                    حفظ تغييرات المفاتيح
+                  </button>
+                </div>
               </div>
 
               <div className="lg:col-span-2 bg-card p-8 rounded-2xl border border-gold/10 shadow-lg space-y-6 mt-8">

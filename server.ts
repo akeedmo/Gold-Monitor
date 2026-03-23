@@ -71,7 +71,8 @@ async function startServer() {
   app.get("/api/gold", async (req, res) => {
     try {
       const currency = req.query.currency || "USD";
-      const response = await axios.get(`https://api.metalpriceapi.com/v1/latest?api_key=1bda868b4ac2385f9e5ceb205450a0f8&base=${currency}&currencies=XAU`, {
+      const apiKey = process.env.METALPRICE_API_KEY || "1bda868b4ac2385f9e5ceb205450a0f8";
+      const response = await axios.get(`https://api.metalpriceapi.com/v1/latest?api_key=${apiKey}&base=${currency}&currencies=XAU`, {
         timeout: 10000
       });
       console.log("API Response Data:", response.data);

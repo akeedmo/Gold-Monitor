@@ -25,8 +25,9 @@ import {
   Share2
 } from 'lucide-react';
 import axios from 'axios';
-import { auth } from './firebase';
+import { auth, db } from './firebase';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Helmet, HelmetProvider } from 'react-helmet-async';
 import { useTranslation } from './i18n';
@@ -82,7 +83,11 @@ const AdPlaceholder = ({ type }: { type: 'header' | 'sidebar' | 'content' }) => 
   const { t } = useTranslation();
   const [settings, setSettings] = useState<any>({});
   useEffect(() => {
-    axios.get('/api/settings').then(res => setSettings(res.data));
+    getDoc(doc(db, 'settings', 'general')).then(res => {
+      if (res.exists()) {
+        setSettings(res.data());
+      }
+    }).catch(console.error);
   }, []);
 
   const adCode = settings[`ads_${type}`];
@@ -175,7 +180,10 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
     }
     setSubLoading(true);
     try {
-      await axios.post('/api/subscribe', { email: emailToUse });
+      await setDoc(doc(db, 'subscribers', emailToUse), {
+        email: emailToUse,
+        subscribedAt: new Date().toISOString()
+      });
       alert(t('subscribed_successfully'));
       setEmail('');
     } catch (error) {
@@ -503,7 +511,7 @@ const NewsPage = ({ news }: any) => {
 
   const handleLike = async (id: number) => {
     try {
-      await axios.post(`/api/news/${id}/like`);
+      // Mock API call for Firebase Hosting
       setNewsList(newsList.map((item: any) => 
         item.id === id ? { ...item, likes: (item.likes || 0) + 1 } : item
       ));
@@ -514,7 +522,7 @@ const NewsPage = ({ news }: any) => {
 
   const handleView = async (id: number) => {
     try {
-      await axios.post(`/api/news/${id}/view`);
+      // Mock API call for Firebase Hosting
       setNewsList(newsList.map((item: any) => 
         item.id === id ? { ...item, views: (item.views || 0) + 1 } : item
       ));
@@ -871,22 +879,37 @@ function AppContent() {
       // For YER, we fetch USD and multiply by local market rates
       const fetchCurrency = currency === 'YER' ? 'USD' : currency;
       
-      // Proxy call to local server
-      const priceRes = await axios.get(`/api/gold?currency=${fetchCurrency}`, {
+      // Direct call to external API
+      let apiKey = import.meta.env.VITE_METALPRICE_API_KEY || "1bda868b4ac2385f9e5ceb205450a0f8";
+      try {
+        const keysDoc = await getDoc(doc(db, 'settings', 'apiKeys'));
+        if (keysDoc.exists() && keysDoc.data().activeKey) {
+          apiKey = keysDoc.data().activeKey;
+        }
+      } catch (e) {
+        console.error("Failed to fetch API keys from Firestore", e);
+      }
+
+      const priceRes = await axios.get(`https://api.metalpriceapi.com/v1/latest?api_key=${apiKey}&base=${fetchCurrency}&currencies=XAU`, {
         timeout: 10000
       });
-      const latest = priceRes.data || {};
       
-      let ratesRes = { data: { YER_SANAA: 530, YER_ADEN: 1650 } };
+      const price = priceRes.data.rates && priceRes.data.rates.XAU ? (1 / priceRes.data.rates.XAU) : 0;
+      const latest = { price: price };
+      
+      let ratesData = { YER_SANAA: 530, YER_ADEN: 1650 };
       try {
-        ratesRes = await axios.get('/api/exchange-rates');
+        const ratesDoc = await getDoc(doc(db, 'settings', 'exchangeRates'));
+        if (ratesDoc.exists()) {
+          ratesData = ratesDoc.data() as any;
+        }
       } catch (e) {
-        console.error("Failed to fetch exchange rates", e);
+        console.error("Failed to fetch exchange rates from Firestore", e);
       }
-      setExchangeRates(ratesRes.data);
+      setExchangeRates(ratesData);
 
       if (currency === 'YER') {
-        const yerRate = yemenRegion === 'SANAA' ? (ratesRes.data.YER_SANAA || 530) : (ratesRes.data.YER_ADEN || 1650);
+        const yerRate = yemenRegion === 'SANAA' ? (ratesData.YER_SANAA || 530) : (ratesData.YER_ADEN || 1650);
         latest.price = latest.price * yerRate;
       }
       
