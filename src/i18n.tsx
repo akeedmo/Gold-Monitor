@@ -141,6 +141,41 @@ export const translations: Translations = {
     en: "Subscribe Now",
     tr: "Şimdi Abone Ol"
   },
+  "subscribe_via_google": {
+    ar: "الاشتراك عبر جوجل",
+    en: "Subscribe via Google",
+    tr: "Google ile Abone Ol"
+  },
+  "enable_push_notifications": {
+    ar: "تفعيل التنبيهات",
+    en: "Enable Push Notifications",
+    tr: "Bildirimleri Etkinleştir"
+  },
+  "or": {
+    ar: "أو",
+    en: "OR",
+    tr: "VEYA"
+  },
+  "invalid_email": {
+    ar: "البريد الإلكتروني غير صالح",
+    en: "Invalid email address",
+    tr: "Geçersiz e-posta adresi"
+  },
+  "subscribed_successfully": {
+    ar: "تم الاشتراك بنجاح!",
+    en: "Subscribed successfully!",
+    tr: "Başarıyla abone olundu!"
+  },
+  "subscription_failed": {
+    ar: "فشل الاشتراك، يرجى المحاولة مرة أخرى",
+    en: "Subscription failed, please try again",
+    tr: "Abonelik başarısız oldu, lütfen tekrar deneyin"
+  },
+  "google_login_failed": {
+    ar: "فشل تسجيل الدخول عبر جوجل",
+    en: "Google login failed",
+    tr: "Google girişi başarısız oldu"
+  },
   "charts_analysis": {
     ar: "الرسوم البيانية والتحليلات",
     en: "Charts and Analysis",

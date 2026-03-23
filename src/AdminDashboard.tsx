@@ -21,7 +21,8 @@ import {
   Mail,
   Menu,
   X,
-  RefreshCw
+  RefreshCw,
+  Globe
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -35,6 +36,9 @@ import {
 } from 'recharts';
 import axios from 'axios';
 import { useTranslation } from './i18n';
+import { auth, db } from './firebase';
+import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 
 interface Stats {
   total: number;
@@ -63,6 +67,50 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   const [successMessage, setSuccessMessage] = useState('');
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        // Check if user is admin in Firestore
+        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+        const isAdmin = userDoc.exists() && userDoc.data().role === 'admin';
+        const isDefaultAdmin = firebaseUser.email === "qydalrfyd@gmail.com";
+        
+        if (isAdmin || isDefaultAdmin) {
+          setUser(firebaseUser);
+          // For backward compatibility with existing API calls that use JWT
+          // We might need to generate a token or update the backend to accept Firebase tokens
+          // For now, we'll just use the firebaseUser object to show the dashboard
+          setToken('firebase-auth-active'); 
+        } else {
+          setError('You are not authorized as an admin');
+          auth.signOut();
+        }
+      } else {
+        setUser(null);
+        setToken(null);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleGoogleLogin = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (err: any) {
+      if (err.code === 'auth/popup-closed-by-user') {
+        console.log('User closed the login popup');
+        return;
+      }
+      setError(err.message || 'Google login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Form states
   const [notifTitle, setNotifTitle] = useState('');
@@ -249,6 +297,23 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
             <button type="submit" disabled={loading} className="w-full py-4 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all disabled:opacity-50">
               {loading ? t('verifying') : t('login')}
             </button>
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-white/10"></div>
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-gray-500">{t('or_continue_with') || 'أو المتابعة عبر'}</span>
+              </div>
+            </div>
+            <button 
+              type="button" 
+              onClick={handleGoogleLogin} 
+              disabled={loading} 
+              className="w-full py-4 bg-white/5 border border-white/10 text-white rounded-xl font-bold hover:bg-white/10 transition-all flex items-center justify-center gap-3"
+            >
+              <Globe size={20} className="text-primary" />
+              {t('login_with_google') || 'الدخول عبر جوجل'}
+            </button>
             <button type="button" onClick={onBack} className="w-full py-2 text-gray-400 text-sm hover:text-primary transition-colors">{t('back_to_site')}</button>
           </form>
         </div>
@@ -300,7 +365,14 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
           ))}
         </nav>
         <div className="p-4 border-t border-white/10">
-          <button onClick={() => { localStorage.removeItem('admin_token'); setToken(null); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-400 hover:bg-red-400/10 transition-all">
+          <button 
+            onClick={() => { 
+              auth.signOut();
+              localStorage.removeItem('admin_token'); 
+              setToken(null); 
+            }} 
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-400 hover:bg-red-400/10 transition-all"
+          >
             <LogOut size={18} />
             <span className="font-bold text-sm">{t('logout')}</span>
           </button>

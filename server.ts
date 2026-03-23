@@ -26,12 +26,16 @@ import {
   increment,
   getDocFromServer
 } from "firebase/firestore";
-import firebaseConfig from "./firebase-applet-config.json";
+
+// Read Firebase configuration
+const firebaseConfig = JSON.parse(fs.readFileSync(path.join(process.cwd(), "firebase-applet-config.json"), "utf8"));
 
 dotenv.config();
 
+console.log("Server starting on port 3000...");
+console.log("NODE_ENV:", process.env.NODE_ENV);
 const app = express();
-const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+const PORT = 3000;
 const parser = new Parser();
 
 // Initialize Firebase
@@ -66,17 +70,13 @@ const authenticate = (req: any, res: any, next: any) => {
 app.use(express.json());
 
 // Visit Tracking Middleware
-app.use(async (req, res, next) => {
+app.use((req, res, next) => {
   if (!req.path.startsWith('/api') && !req.path.includes('.')) {
-    try {
-      await addDoc(collection(db, "visits"), {
-        ip: req.ip || req.headers['x-forwarded-for'] || 'unknown',
-        user_agent: req.headers['user-agent'] || 'unknown',
-        timestamp: Timestamp.now()
-      });
-    } catch (e) {
-      console.error("Tracking error:", e);
-    }
+    addDoc(collection(db, "visits"), {
+      ip: req.ip || req.headers['x-forwarded-for'] || 'unknown',
+      user_agent: req.headers['user-agent'] || 'unknown',
+      timestamp: Timestamp.now()
+    }).catch(e => console.error("Tracking error:", e));
   }
   next();
 });
@@ -382,7 +382,11 @@ async function fetchGoldPrices() {
         return;
       }
     } catch (error: any) {
-      console.warn(`Primary Gold API failed: ${error.message}`);
+      if (error.response?.status === 403) {
+        console.warn(`Primary Gold API (goldapi.io) returned 403 Forbidden. This usually means the API key is invalid or quota exceeded. Falling back...`);
+      } else {
+        console.warn(`Primary Gold API failed: ${error.message}. Falling back...`);
+      }
     }
   }
 
@@ -485,24 +489,28 @@ app.get("/sitemap.xml", (req, res) => {
 });
 
 async function initFirestore() {
-  // Default Settings
-  const defaultSettings = [
-    ['site_name', 'أسعار الذهب المباشرة'],
-    ['primary_color', '#D4AF37'],
-    ['secondary_color', '#000000'],
-    ['admin_email', 'qydalrfyd@gmail.com']
-  ];
+  try {
+    // Default Settings
+    const defaultSettings = [
+      ['site_name', 'أسعار الذهب المباشرة'],
+      ['primary_color', '#D4AF37'],
+      ['secondary_color', '#000000'],
+      ['admin_email', 'qydalrfyd@gmail.com']
+    ];
 
-  for (const [key, value] of defaultSettings) {
-    const sDoc = await getDoc(doc(db, "settings", key));
-    if (!sDoc.exists()) {
-      await setDoc(doc(db, "settings", key), { value });
+    for (const [key, value] of defaultSettings) {
+      const sDoc = await getDoc(doc(db, "settings", key));
+      if (!sDoc.exists()) {
+        await setDoc(doc(db, "settings", key), { value });
+      }
     }
+  } catch (error) {
+    console.warn("Firestore initialization skipped or failed (likely permissions):", error instanceof Error ? error.message : error);
   }
 }
 
 async function startServer() {
-  await initFirestore();
+  initFirestore().catch(err => console.error("initFirestore background error:", err));
 
   // Run automation
   setInterval(fetchGoldPrices, 5 * 60 * 1000);
@@ -514,24 +522,21 @@ async function startServer() {
   fetchNews();
   fetchExchangeRates();
 
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    app.use(express.static(path.join(process.cwd(), "dist")));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(process.cwd(), "dist", "index.html"));
-    });
-  }
+  console.log("Initializing Vite middleware...");
+  const vite = await createViteServer({
+    server: { middlewareMode: true },
+    appType: "spa",
+  });
+  app.use(vite.middlewares);
 
+  console.log("Vite middleware initialized. Starting listener...");
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
   });
 }
 
-startServer();
+startServer().catch(err => {
+  console.error("CRITICAL: Failed to start server:", err);
+});
 
 export default app;

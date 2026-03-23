@@ -25,6 +25,8 @@ import {
   Share2
 } from 'lucide-react';
 import axios from 'axios';
+import { auth } from './firebase';
+import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Helmet, HelmetProvider } from 'react-helmet-async';
 import { useTranslation } from './i18n';
@@ -165,14 +167,40 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
   const [email, setEmail] = useState('');
   const [subLoading, setSubLoading] = useState(false);
 
-  const handleSubscribe = async () => {
+  const handleSubscribe = async (e?: any, googleEmail?: string) => {
+    const emailToUse = googleEmail || email;
+    if (!emailToUse || !emailToUse.includes('@')) {
+      alert(t('invalid_email') || 'البريد الإلكتروني غير صالح');
+      return;
+    }
     setSubLoading(true);
     try {
-      await axios.post('/api/subscribe', { email });
+      await axios.post('/api/subscribe', { email: emailToUse });
       alert(t('subscribed_successfully'));
       setEmail('');
     } catch (error) {
       console.error("Subscription failed", error);
+      alert(t('subscription_failed') || 'فشل الاشتراك');
+    } finally {
+      setSubLoading(false);
+    }
+  };
+
+  const handleGoogleSubscribe = async () => {
+    setSubLoading(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      if (result.user.email) {
+        await handleSubscribe(null, result.user.email);
+      }
+    } catch (err: any) {
+      if (err.code === 'auth/popup-closed-by-user') {
+        console.log('User closed the login popup');
+        return;
+      }
+      console.error(err);
+      alert(t('google_login_failed') || 'فشل الاشتراك عبر جوجل');
     } finally {
       setSubLoading(false);
     }
@@ -180,16 +208,17 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
   return (
     <div className="space-y-8 pb-24 md:pb-8">
       <Helmet>
-        <title>أسعار الذهب اليوم مباشرة | مراقب الذهب العالمي</title>
-        <meta name="description" content="موقع مراقب الذهب لمتابعة أسعار الذهب العالمية والمحلية لحظة بلحظة مع دعم عدة عملات ولغات. الموقع يدعم ثلاث لغات: العربية، الإنجليزية، التركية، ويوفر متابعة أسعار الذهب بسهولة من الجوال والكمبيوتر. مناسب للمتداولين والمستثمرين وكل المهتمين بأسعار الذهب." />
-        <meta name="keywords" content="أسعار الذهب, سعر الذهب اليوم, Gold Price, اسعار الذهب مباشر, Gold Live, متابعة الذهب" />
-        <meta property="og:title" content="أسعار الذهب اليوم مباشرة | مراقب الذهب العالمي" />
-        <meta property="og:description" content="موقع مراقب الذهب لمتابعة أسعار الذهب العالمية والمحلية لحظة بلحظة مع دعم عدة عملات ولغات. الموقع يدعم ثلاث لغات: العربية، الإنجليزية، التركية، ويوفر متابعة أسعار الذهب بسهولة من الجوال والكمبيوتر. مناسب للمتداولين والمستثمرين وكل المهتمين بأسعار الذهب." />
-        <meta property="og:image" content="https://gold-monitor-production.up.railway.app/logo.png" />
+        <title>مراقب الذهب | أسعار الذهب اليوم مباشرة</title>
+        <meta name="description" content="تابع أسعار الذهب العالمية والمحلية لحظة بلحظة. أدق الأسعار بجميع العملات واللغات." />
+        <meta name="keywords" content="أسعار الذهب, سعر الذهب اليوم, Gold Price, اسعار الذهب مباشر" />
+        <meta property="og:title" content="مراقب الذهب | أسعار الذهب اليوم مباشرة" />
+        <meta property="og:description" content="تابع أسعار الذهب العالمية والمحلية لحظة بلحظة. أدق الأسعار بجميع العملات واللغات." />
+        <meta property="og:image" content="https://goldmonitor-1b4ce.web.app/logo.png" />
+        <meta property="og:url" content="https://goldmonitor-1b4ce.web.app" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="أسعار الذهب اليوم مباشرة | مراقب الذهب العالمي" />
-        <meta name="twitter:description" content="موقع مراقب الذهب لمتابعة أسعار الذهب العالمية والمحلية لحظة بلحظة مع دعم عدة عملات ولغات. الموقع يدعم ثلاث لغات: العربية، الإنجليزية، التركية، ويوفر متابعة أسعار الذهب بسهولة من الجوال والكمبيوتر. مناسب للمتداولين والمستثمرين وكل المهتمين بأسعار الذهب." />
-        <meta name="twitter:image" content="https://gold-monitor-production.up.railway.app/logo.png" />
+        <meta name="twitter:title" content="مراقب الذهب | أسعار الذهب اليوم مباشرة" />
+        <meta name="twitter:description" content="تابع أسعار الذهب العالمية والمحلية لحظة بلحظة. أدق الأسعار بجميع العملات واللغات." />
+        <meta name="twitter:image" content="https://goldmonitor-1b4ce.web.app/logo.png" />
       </Helmet>
 
       {/* Welcome */}
@@ -197,9 +226,34 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
         <div className="flex items-center gap-4">
           <CurrencyLanguageSelector currency={currency} setCurrency={setCurrency} language={language} setLanguage={setLanguage} />
         </div>
-        <div className="flex flex-col md:items-end">
+        <div className="flex flex-col md:items-end gap-2">
           <h2 className="text-3xl font-bold gold-text-gradient">{t('market_overview')}</h2>
-          <p className="text-sm text-gray-500 mt-1">{t('last_update')} {lastUpdate.toLocaleTimeString(locale)}</p>
+          <div className="flex items-center gap-4">
+            <p className="text-sm text-gray-500">{t('last_update')} {lastUpdate.toLocaleTimeString(locale)}</p>
+            <button 
+              onClick={async () => {
+                if (navigator.share) {
+                  try {
+                    await navigator.share({
+                      title: 'مراقب الذهب',
+                      text: 'تابع أسعار الذهب العالمية والمحلية لحظة بلحظة',
+                      url: window.location.href,
+                    });
+                  } catch (err: any) {
+                    if (err.name !== 'AbortError') {
+                      console.error('Error sharing:', err);
+                    }
+                  }
+                } else {
+                  navigator.clipboard.writeText(window.location.href);
+                  alert('تم نسخ الرابط!');
+                }
+              }}
+              className="p-2 bg-white/5 rounded-lg border border-gold/20 text-primary hover:bg-white/10 transition-all"
+            >
+              <Share2 size={16} />
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-2 text-xs font-bold text-up bg-up/10 px-3 py-1.5 rounded-full">
           <div className="w-2 h-2 rounded-full bg-up animate-pulse" />
@@ -251,8 +305,38 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
               placeholder={t('email_placeholder')} 
               className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition-all text-white"
             />
-            <button onClick={handleSubscribe} disabled={subLoading} className="w-full bg-primary text-black px-6 py-3 rounded-xl font-bold text-sm hover:bg-primary/80 transition-all shadow-lg shadow-primary/20">
+            <button onClick={() => handleSubscribe()} disabled={subLoading} className="w-full bg-primary text-black px-6 py-3 rounded-xl font-bold text-sm hover:bg-primary/80 transition-all shadow-lg shadow-primary/20">
               {subLoading ? <RefreshCw className="animate-spin mx-auto" size={18} /> : t('subscribe_now')}
+            </button>
+            <div className="relative my-2">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-white/10"></div>
+              </div>
+              <div className="relative flex justify-center text-[10px] uppercase">
+                <span className="bg-transparent px-2 text-gray-500">{t('or') || 'أو'}</span>
+              </div>
+            </div>
+            <button 
+              onClick={handleGoogleSubscribe} 
+              disabled={subLoading} 
+              className="w-full bg-white/5 border border-white/10 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-white/10 transition-all flex items-center justify-center gap-2"
+            >
+              <Globe size={18} className="text-primary" />
+              {t('subscribe_via_google') || 'الاشتراك عبر جوجل'}
+            </button>
+            <button 
+              onClick={() => {
+                const OneSignal = (window as any).OneSignal;
+                if (OneSignal) {
+                  OneSignal.showNativePrompt();
+                } else {
+                  alert('OneSignal is not loaded yet');
+                }
+              }}
+              className="w-full bg-white/5 border border-white/10 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-white/10 transition-all flex items-center justify-center gap-2"
+            >
+              <Bell size={18} className="text-primary" />
+              {t('enable_push_notifications') || 'تفعيل التنبيهات'}
             </button>
           </div>
         </div>
@@ -320,11 +404,11 @@ const ChartsPage = ({ chartData, currency, setCurrency, language, setLanguage }:
         <meta name="description" content={t('meta_desc_charts')} />
         <meta property="og:title" content={t('charts_analysis')} />
         <meta property="og:description" content={t('meta_desc_charts')} />
-        <meta property="og:image" content="https://gold-monitor-production.up.railway.app/logo.png" />
+        <meta property="og:image" content="https://goldmonitor-1b4ce.web.app/logo.png" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={t('charts_analysis')} />
         <meta name="twitter:description" content={t('meta_desc_charts')} />
-        <meta name="twitter:image" content="https://gold-monitor-production.up.railway.app/logo.png" />
+        <meta name="twitter:image" content="https://goldmonitor-1b4ce.web.app/logo.png" />
       </Helmet>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -450,11 +534,11 @@ const NewsPage = ({ news }: any) => {
         <meta name="description" content={t('meta_desc_news')} />
         <meta property="og:title" content={t('gold_news_markets')} />
         <meta property="og:description" content={t('meta_desc_news')} />
-        <meta property="og:image" content="https://gold-monitor-production.up.railway.app/logo.png" />
+        <meta property="og:image" content="https://goldmonitor-1b4ce.web.app/logo.png" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={t('gold_news_markets')} />
         <meta name="twitter:description" content={t('meta_desc_news')} />
-        <meta name="twitter:image" content="https://gold-monitor-production.up.railway.app/logo.png" />
+        <meta name="twitter:image" content="https://goldmonitor-1b4ce.web.app/logo.png" />
       </Helmet>
       <h2 className="text-3xl font-bold gold-text-gradient">{t('gold_news_markets')}</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -525,11 +609,11 @@ const TipsPage = () => {
         <meta name="description" content={t('meta_desc_tips')} />
         <meta property="og:title" content={t('investment_tips')} />
         <meta property="og:description" content={t('meta_desc_tips')} />
-        <meta property="og:image" content="https://gold-monitor-production.up.railway.app/logo.png" />
+        <meta property="og:image" content="https://goldmonitor-1b4ce.web.app/logo.png" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={t('investment_tips')} />
         <meta name="twitter:description" content={t('meta_desc_tips')} />
-        <meta name="twitter:image" content="https://gold-monitor-production.up.railway.app/logo.png" />
+        <meta name="twitter:image" content="https://goldmonitor-1b4ce.web.app/logo.png" />
       </Helmet>
       <h2 className="text-3xl font-bold gold-text-gradient">{t('investment_tips')}</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -563,11 +647,11 @@ const AboutPage = () => {
         <meta name="description" content={t('meta_desc_about')} />
         <meta property="og:title" content={t('about_title')} />
         <meta property="og:description" content={t('meta_desc_about')} />
-        <meta property="og:image" content="https://gold-monitor-production.up.railway.app/logo.png" />
+        <meta property="og:image" content="https://goldmonitor-1b4ce.web.app/logo.png" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={t('about_title')} />
         <meta name="twitter:description" content={t('meta_desc_about')} />
-        <meta name="twitter:image" content="https://gold-monitor-production.up.railway.app/logo.png" />
+        <meta name="twitter:image" content="https://goldmonitor-1b4ce.web.app/logo.png" />
       </Helmet>
       <div className="bg-card p-12 rounded-3xl border border-gold/10 card-shadow text-center space-y-6">
         <div className="w-20 h-20 gold-gradient rounded-3xl flex items-center justify-center text-black mx-auto shadow-xl">
@@ -750,7 +834,7 @@ function AppContent() {
     const shareData = {
       title: 'أسعار الذهب المباشرة',
       text: `🌟 المنصة الشاملة لأسعار الذهب المباشرة: بوصلتك في عالم الاستثمار 🌟\n\nهل تبحث عن مصدر موثوق وسريع لمتابعة أسعار الذهب لحظة بلحظة؟\nفي عالم تتسارع فيه التغيرات الاقتصادية، تعتبر منصتنا "أسعار الذهب المباشرة" أداتك الأقوى للبقاء في صدارة السوق. نحن لا نقدم لك مجرد أرقام، بل نضع بين يديك منصة متكاملة تجمع بين دقة البيانات، وسرعة التنبيهات، وعمق التحليل الاقتصادي.\n\n👇 لا تدع الفرصة تفوتك!\nقم بزيارة الموقع الآن، اشترك في القائمة البريدية، وفعّل الإشعارات لتكون أول من يعلم بتحركات السوق.\n`,
-      url: 'https://gold-monitor-production.up.railway.app/'
+      url: 'https://goldmonitor-1b4ce.web.app/'
     };
 
     try {
@@ -760,8 +844,10 @@ function AppContent() {
         await navigator.clipboard.writeText(`${shareData.text}\n${shareData.url}`);
         alert(t('link_copied') || 'تم نسخ رابط المشاركة!');
       }
-    } catch (err) {
-      console.error('Error sharing:', err);
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        console.error('Error sharing:', err);
+      }
     }
   };
 
@@ -807,10 +893,23 @@ function AppContent() {
       ];
       setPrices(formattedPrices);
 
-      const history = historyData.map((h: any) => ({
-        timestamp: h.timestamp ? h.timestamp.replace(' ', 'T') + 'Z' : new Date().toISOString(),
-        value: h.price_24k * rate
-      })).reverse();
+      const history = historyData.map((h: any) => {
+        let ts = new Date().toISOString();
+        if (h.timestamp) {
+          if (typeof h.timestamp === 'string') {
+            ts = h.timestamp.replace(' ', 'T') + 'Z';
+          } else if (h.timestamp.seconds !== undefined || h.timestamp._seconds !== undefined) {
+            const seconds = h.timestamp.seconds !== undefined ? h.timestamp.seconds : h.timestamp._seconds;
+            ts = new Date(seconds * 1000).toISOString();
+          } else if (h.timestamp instanceof Date) {
+            ts = h.timestamp.toISOString();
+          }
+        }
+        return {
+          timestamp: ts,
+          value: h.price_24k * rate
+        };
+      }).reverse();
       setChartData(history);
 
       setNews(newsRes.data);
@@ -975,6 +1074,7 @@ function AppContent() {
           <Route path="/news" element={<NewsPage news={news} />} />
           <Route path="/tips" element={<TipsPage />} />
           <Route path="/about" element={<AboutPage />} />
+          <Route path="/admin" element={<Suspense fallback={<div className="min-h-screen bg-bg flex items-center justify-center"><RefreshCw className="w-10 h-10 text-primary animate-spin" /></div>}><AdminDashboard onBack={() => window.location.href = '/'} /></Suspense>} />
         </Routes>
       </main>
 
