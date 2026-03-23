@@ -39,7 +39,7 @@ import axios from 'axios';
 import { useTranslation } from './i18n';
 import { auth, db } from './firebase';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 
 interface Stats {
   total: number;
@@ -61,6 +61,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   const [exchangeRates, setExchangeRates] = useState<any>({});
   const [apiKeys, setApiKeys] = useState({ activeKey: '', pendingKeys: [] as string[], expiredKeys: [] as string[] });
   const [newApiKey, setNewApiKey] = useState('');
+  const [visitors, setVisitors] = useState<any[]>([]);
   const [news, setNews] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('overview');
@@ -130,26 +131,6 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     setTimeout(() => setSuccessMessage(''), 3000);
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    try {
-      // Mock login for Firebase Hosting
-      if (password === 'admin123') { // Simple mock password
-        const mockToken = 'mock_token_' + Date.now();
-        localStorage.setItem('admin_token', mockToken);
-        setToken(mockToken);
-      } else {
-        throw new Error('Invalid password');
-      }
-    } catch (err: any) {
-      setError(err.message || 'Login failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleChangePassword = async () => {
     if (!newPassword || newPassword.length < 6) {
       setError(t('error_password_length'));
@@ -159,12 +140,33 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     setError('');
     setPasswordSuccess('');
     try {
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-      await axios.post('/api/admin/change-password', { newPassword }, config);
+      await setDoc(doc(db, 'settings', 'admin'), { password: newPassword }, { merge: true });
       setPasswordSuccess(t('success_password_changed'));
       setNewPassword('');
     } catch (err: any) {
-      setError(err.response?.data?.error || t('error_password_change_failed'));
+      setError(t('error_password_change_failed'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const adminDoc = await getDoc(doc(db, 'settings', 'admin'));
+      const actualPassword = adminDoc.exists() && adminDoc.data().password ? adminDoc.data().password : 'admin123';
+      
+      if (password === actualPassword) {
+        const mockToken = 'mock_token_' + Date.now();
+        localStorage.setItem('admin_token', mockToken);
+        setToken(mockToken);
+      } else {
+        throw new Error('كلمة المرور غير صحيحة');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Login failed');
     } finally {
       setLoading(false);
     }
@@ -173,8 +175,24 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   const fetchData = async () => {
     if (!token) return;
     try {
-      // Mock data for Firebase Hosting since there is no backend
-      const statsRes = { data: { total: 1500, today: 120, week: 800, month: 3000, history: [], latestPrice: { price: 2500 }, totalNews: 45 } };
+      let realStats = { total: 0, today: 0, week: 0, month: 0, history: [], latestPrice: { price: 0 }, totalNews: 0 };
+      try {
+        const statsDoc = await getDoc(doc(db, 'settings', 'stats'));
+        if (statsDoc.exists()) {
+          realStats = { ...realStats, ...statsDoc.data() };
+        }
+      } catch (e) {
+        console.error("Failed to fetch stats from Firestore", e);
+      }
+
+      try {
+        const visitorsQuery = query(collection(db, 'visitors'), orderBy('timestamp', 'desc'), limit(50));
+        const visitorsSnap = await getDocs(visitorsQuery);
+        const visitorsData = visitorsSnap.docs.map(d => d.data());
+        setVisitors(visitorsData);
+      } catch (e) {
+        console.error("Failed to fetch visitors from Firestore", e);
+      }
       
       let settingsRes = { data: { siteName: "مراقب الذهب", contactEmail: "qydalrfyd@gmail.com", maintenanceMode: false } };
       try {
@@ -212,7 +230,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
         console.error("Failed to fetch api keys from Firestore", e);
       }
 
-      setStats(statsRes.data);
+      setStats(realStats);
       setSettings(settingsRes.data);
       setNews(newsRes.data);
       setNotifications(notifRes.data);
@@ -519,6 +537,51 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                       <Bar dataKey="count" fill="#D4AF37" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="bg-card p-8 rounded-2xl border border-gold/10 shadow-lg mt-8">
+                <h3 className="text-lg font-bold mb-6 text-white flex items-center gap-2">
+                  <Globe size={20} className="text-primary" />
+                  سجل الزيارات الأخير
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left rtl:text-right text-gray-400">
+                    <thead className="text-xs text-gray-300 uppercase bg-white/5 border-b border-white/10">
+                      <tr>
+                        <th scope="col" className="px-6 py-3">الوقت والتاريخ</th>
+                        <th scope="col" className="px-6 py-3">البلد</th>
+                        <th scope="col" className="px-6 py-3">المدينة</th>
+                        <th scope="col" className="px-6 py-3">IP</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visitors && visitors.length > 0 ? (
+                        visitors.map((visitor, idx) => (
+                          <tr key={idx} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                            <td className="px-6 py-4 font-mono text-xs">
+                              {new Date(visitor.timestamp).toLocaleString(locale)}
+                            </td>
+                            <td className="px-6 py-4 font-bold text-white">
+                              {visitor.country || 'غير معروف'}
+                            </td>
+                            <td className="px-6 py-4">
+                              {visitor.city || '-'}
+                            </td>
+                            <td className="px-6 py-4 font-mono text-xs">
+                              {visitor.ip || '-'}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
+                            لا توجد زيارات مسجلة بعد
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>

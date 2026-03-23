@@ -27,7 +27,7 @@ import {
 import axios from 'axios';
 import { auth, db } from './firebase';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, addDoc, increment } from 'firebase/firestore';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Helmet, HelmetProvider } from 'react-helmet-async';
 import { useTranslation } from './i18n';
@@ -819,6 +819,39 @@ function AppContent() {
   const location = useLocation();
 
   useEffect(() => {
+    const trackVisitor = async () => {
+      if (sessionStorage.getItem('visited')) return;
+      sessionStorage.setItem('visited', 'true');
+      try {
+        const res = await axios.get('https://ipapi.co/json/');
+        const { ip, country_name, city } = res.data;
+        await addDoc(collection(db, 'visitors'), {
+          ip,
+          country: country_name,
+          city,
+          timestamp: new Date().toISOString()
+        });
+        
+        const statsRef = doc(db, 'settings', 'stats');
+        const statsDoc = await getDoc(statsRef);
+        if (!statsDoc.exists()) {
+          await setDoc(statsRef, { total: 1, today: 1, week: 1, month: 1, history: [], totalNews: 0 });
+        } else {
+          await setDoc(statsRef, { 
+            total: increment(1), 
+            today: increment(1),
+            week: increment(1),
+            month: increment(1)
+          }, { merge: true });
+        }
+      } catch (e) {
+        console.error("Visitor tracking failed", e);
+      }
+    };
+    trackVisitor();
+  }, []);
+
+  useEffect(() => {
     setIsLoggedIn(!!localStorage.getItem('admin_token'));
   }, [isAdmin]);
 
@@ -836,6 +869,7 @@ function AppContent() {
 
   const handleShare = async (type: 'prices' | 'general' = 'prices') => {
     let shareText = '';
+    const hashtags = "\n\n#السعودية #اليمن #صنعاء #عدن #الذهب #اسعار_الذهب #مصر";
     
     if (type === 'prices') {
       let countryName = t(currency);
@@ -847,9 +881,9 @@ function AppContent() {
       const formattedTime = lastUpdate.toLocaleTimeString(locale);
       
       const priceList = prices.map(p => `${p.type}: ${p.price.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`).join('\n');
-      shareText = `🌟 ${t('site_title')} 🌟\n\n${t('prices_in_country')} ${countryName}:\n${priceList}\n\n🕒 ${t('last_update')}: ${formattedDate} ${formattedTime}\n\n${t('footer_desc')}`;
+      shareText = `🌟 ${t('site_title')} 🌟\n\n${t('prices_in_country')} ${countryName}:\n${priceList}\n\n🕒 ${t('last_update')}: ${formattedDate} ${formattedTime}\n\n${t('footer_desc')}${hashtags}`;
     } else {
-      shareText = `🌟 ${t('site_title')} 🌟\n\n${t('share_description')}\n\n${t('footer_desc')}`;
+      shareText = `🌟 ${t('site_title')} 🌟\n\n${t('share_description')}\n\n${t('footer_desc')}${hashtags}`;
     }
     
     const shareData = {

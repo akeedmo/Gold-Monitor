@@ -38,16 +38,21 @@ service cloud.firestore {
          request.resource.data.views >= resource.data.views);
     }
 
-    // Visits
-    match /visits/{visitId} {
+    // Visitors
+    match /visitors/{visitorId} {
       allow read: if isAdmin();
-      allow create: if true; // Server-side or client-side tracking
+      allow create: if true; // Allow anyone to track their visit
     }
 
     // Settings
     match /settings/{settingId} {
       allow read: if true;
-      allow write: if isAdmin() || request.auth == null; // Allow server-side initialization
+      allow write: if isAdmin();
+      
+      // Specifically allow stats increment for everyone
+      allow create: if settingId == 'stats';
+      allow update: if settingId == 'stats' && 
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['total', 'today', 'week', 'month']);
     }
 
     // Notifications
