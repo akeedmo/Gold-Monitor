@@ -284,6 +284,45 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     setNewApiKey('');
   };
 
+  const [testLoading, setTestLoading] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleTestKey = async (keyToTest: string) => {
+    if (!keyToTest) {
+      setTestResult({ success: false, message: 'لا يوجد مفتاح للاختبار' });
+      return;
+    }
+    setTestLoading(true);
+    setTestResult(null);
+    try {
+      // Test the key by making a request to the gold price API
+      const response = await axios.get(`https://api.metalpriceapi.com/v1/latest?api_key=${keyToTest}&base=USD&currencies=XAU`, {
+        timeout: 10000
+      });
+      
+      if (response.data.success) {
+        setTestResult({ success: true, message: 'المفتاح يعمل بنجاح!' });
+      } else {
+        setTestResult({ success: false, message: `فشل الاختبار: ${response.data.error?.info || 'مفتاح غير صالح'}` });
+      }
+    } catch (err: any) {
+      setTestResult({ success: false, message: 'فشل الاتصال بالخدمة، تأكد من اتصال الإنترنت أو صحة المفتاح' });
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
+  const handleMarkAsExpired = () => {
+    setApiKeys(prev => {
+      const newExpired = prev.activeKey ? [...(prev.expiredKeys || []), prev.activeKey] : (prev.expiredKeys || []);
+      return {
+        activeKey: '',
+        pendingKeys: prev.pendingKeys || [],
+        expiredKeys: newExpired
+      };
+    });
+  };
+
   const handleSwitchKey = () => {
     setApiKeys(prev => {
       const newExpired = prev.activeKey ? [...(prev.expiredKeys || []), prev.activeKey] : (prev.expiredKeys || []);
@@ -965,17 +1004,43 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                 
                 <div className="space-y-4">
                   <div className="bg-white/5 p-4 rounded-xl border border-white/10">
-                    <p className="text-sm text-gray-400 mb-2">المفتاح النشط حالياً:</p>
+                    <div className="flex justify-between items-center mb-2">
+                      <p className="text-sm text-gray-400">المفتاح النشط حالياً:</p>
+                      <span className="text-xs font-bold text-green-500 bg-green-500/10 px-2 py-1 rounded-full">نشط</span>
+                    </div>
                     <div className="flex items-center justify-between gap-4">
                       <code className="text-primary font-mono bg-black/50 px-3 py-2 rounded-lg flex-1 overflow-x-auto">
                         {apiKeys.activeKey || 'لا يوجد مفتاح نشط'}
                       </code>
-                      <button 
-                        onClick={handleSwitchKey}
-                        className="bg-red-500/20 text-red-500 hover:bg-red-500/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors whitespace-nowrap"
+                      <a 
+                        href="https://metalpriceapi.com/dashboard" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline"
                       >
-                        إلغاء وتفعيل التالي
-                      </button>
+                        إدارة المفاتيح
+                      </a>
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => handleTestKey(apiKeys.activeKey)}
+                          disabled={testLoading}
+                          className="bg-blue-500/20 text-blue-500 hover:bg-blue-500/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors whitespace-nowrap disabled:opacity-50"
+                        >
+                          {testLoading ? 'جاري الاختبار...' : 'اختبار المفتاح'}
+                        </button>
+                        <button 
+                          onClick={handleMarkAsExpired}
+                          className="bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors whitespace-nowrap"
+                        >
+                          تحديد كمنتهي الصلاحية
+                        </button>
+                        <button 
+                          onClick={handleSwitchKey}
+                          className="bg-red-500/20 text-red-500 hover:bg-red-500/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors whitespace-nowrap"
+                        >
+                          إلغاء وتفعيل التالي
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -1024,7 +1089,10 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
 
                   {apiKeys.expiredKeys && apiKeys.expiredKeys.length > 0 && (
                     <div className="bg-white/5 p-4 rounded-xl border border-white/10 opacity-70">
-                      <p className="text-sm text-gray-400 mb-2">المفاتيح المنتهية ({apiKeys.expiredKeys.length}):</p>
+                      <div className="flex justify-between items-center mb-2">
+                        <p className="text-sm text-gray-400">المفاتيح المنتهية ({apiKeys.expiredKeys.length}):</p>
+                        <span className="text-xs font-bold text-red-500 bg-red-500/10 px-2 py-1 rounded-full">منتهي</span>
+                      </div>
                       <ul className="space-y-2">
                         {apiKeys.expiredKeys.map((key, idx) => (
                           <li key={idx} className="text-sm bg-black/30 px-3 py-2 rounded-lg">
