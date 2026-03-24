@@ -154,6 +154,33 @@ async function startServer() {
 
       // 4. Fetch from API
       let price = 0;
+      let lastErrorMessage = "";
+      
+      // --- NEW: Primary Free API (Original Method) ---
+      try {
+        console.log("Attempting to fetch real price from primary free API (gold-api.com)...");
+        const freeApiRes = await axios.get('https://api.gold-api.com/price/XAU', { timeout: 8000 });
+        const freePrice = Number(freeApiRes.data.price);
+        if (freePrice > 0) {
+          console.log(`Primary Free API success: ${freePrice}`);
+          goldPriceCache = { price: freePrice, timestamp: now, isFallback: false };
+          
+          // Update stats and clear error log on success
+          try {
+            await setDoc(doc(db, 'settings', 'stats'), {
+              latestPrice: { price: freePrice, timestamp: new Date(now).toISOString() }
+            }, { merge: true });
+            await setDoc(doc(db, 'settings', 'apiKeys'), { 
+              lastError: null, lastSuccess: new Date(now).toISOString()
+            }, { merge: true });
+          } catch (dbErr) { /* ignore */ }
+          
+          return res.json(goldPriceCache);
+        }
+      } catch (freeErr: any) {
+        console.warn("Primary Free API failed:", freeErr.message);
+      }
+
       const keysToTry = [];
       
       // Add active key first
@@ -170,8 +197,6 @@ async function startServer() {
         else if (rawP.includes('PRICE')) pProv = 'GoldPriceAPI';
         keysToTry.push({ key: p.key, provider: pProv, isPrimary: false });
       });
-
-      let lastErrorMessage = "";
 
       for (const item of keysToTry) {
         try {
@@ -249,7 +274,6 @@ async function startServer() {
       }
 
       // 5. Final Fallback (if all keys fail)
-      console.error(`All API attempts failed. Last error: ${lastErrorMessage}`);
       
       // --- NEW: Real-Price Fallback (PAXG) ---
       // If all keys fail, try to get real market price of PAX Gold (1:1 with Gold)
@@ -272,8 +296,24 @@ async function startServer() {
           return res.json(goldPriceCache);
         }
       } catch (paxgErr: any) {
-        console.error("PAXG fallback failed:", paxgErr.message);
+        console.warn("PAXG fallback (CoinGecko) failed:", paxgErr.message);
+        
+        // Try Binance as another fallback for PAXG
+        try {
+          console.log("Attempting to fetch real price from PAXG (Binance)...");
+          const binanceRes = await axios.get('https://api.binance.com/api/v3/ticker/price?symbol=PAXGUSDT', { timeout: 5000 });
+          const binancePrice = Number(binanceRes.data.price);
+          if (binancePrice > 0) {
+            console.log(`PAXG Fallback (Binance) success: ${binancePrice}`);
+            goldPriceCache = { price: binancePrice, timestamp: now, isFallback: true };
+            return res.json(goldPriceCache);
+          }
+        } catch (binanceErr: any) {
+          console.warn("PAXG fallback (Binance) failed:", binanceErr.message);
+        }
       }
+
+      console.error(`All API attempts failed. Last error: ${lastErrorMessage}`);
 
       // If we have a manual price, use it as a more reliable fallback than stale cache
       if (Number.isFinite(manualPrice) && manualPrice > 0) {

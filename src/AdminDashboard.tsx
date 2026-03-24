@@ -524,7 +524,8 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     setError('');
     try {
       await axios.post('/api/admin/notifications', { title: notifTitle, message: notifMessage, emails: selectedEmails }, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 15000
       });
       showSuccess(t('success_alert_sent'));
       setNotifTitle('');
@@ -543,7 +544,8 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     setError('');
     try {
       await axios.post('/api/admin/announcement', { title: announcementTitle, content: announcementContent }, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 15000
       });
       showSuccess(t('success_ad_published'));
       setAnnouncementTitle('');
@@ -561,7 +563,8 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     setLoading(true);
     try {
       await axios.delete(`/api/news/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 10000
       });
       showSuccess(t('success_news_deleted'));
       fetchData();

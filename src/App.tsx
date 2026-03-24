@@ -825,13 +825,35 @@ function AppContent() {
   useEffect(() => {
     const trackVisitor = async () => {
       try {
-        const res = await axios.get('https://ipapi.co/json/');
-        const { ip, country_name, city } = res.data;
+        let ipData = { ip: 'Unknown', country_name: 'Unknown', city: 'Unknown' };
+        
+        try {
+          // Try ipapi.co first
+          const res = await axios.get('https://ipapi.co/json/', { timeout: 5000 });
+          ipData = {
+            ip: res.data.ip || 'Unknown',
+            country_name: res.data.country_name || 'Unknown',
+            city: res.data.city || 'Unknown'
+          };
+        } catch (e1) {
+          try {
+            // Fallback to ip-api.com
+            const res = await axios.get('http://ip-api.com/json/', { timeout: 5000 });
+            ipData = {
+              ip: res.data.query || 'Unknown',
+              country_name: res.data.country || 'Unknown',
+              city: res.data.city || 'Unknown'
+            };
+          } catch (e2) {
+            // If both fail, we still want to track the visit
+            console.warn("Could not fetch IP details, tracking visit anonymously");
+          }
+        }
+
         await addDoc(collection(db, 'visitors'), {
-          ip,
-          country: country_name,
-          city,
-          timestamp: new Date().toISOString()
+          ...ipData,
+          timestamp: new Date().toISOString(),
+          userAgent: navigator.userAgent
         });
         
         const statsRef = doc(db, 'settings', 'stats');
@@ -847,7 +869,8 @@ function AppContent() {
           }, { merge: true });
         }
       } catch (e) {
-        console.error("Visitor tracking failed", e);
+        // Silently fail visitor tracking to avoid annoying the user
+        // console.error("Visitor tracking failed", e);
       }
     };
     trackVisitor();
@@ -914,7 +937,7 @@ function AppContent() {
     try {
       // Fetch gold price from our server-side proxy (which handles caching and rate limits)
       // The server returns the price of 1 ounce of gold in USD.
-      const goldResponse = await axios.get(`/api/gold-price${force ? '?force=true' : ''}`);
+      const goldResponse = await axios.get(`/api/gold-price${force ? '?force=true' : ''}`, { timeout: 15000 });
       const { price, isFallback } = goldResponse.data;
       const goldPriceOunce = Number(price) || 2150;
 
