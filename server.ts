@@ -96,6 +96,7 @@ async function startServer() {
           apiKey = data.activeKey.key;
           const rawProvider = data.activeKey.provider || "GoldAPI";
           apiProvider = rawProvider.toUpperCase().includes('METAL') ? 'MetalPrice' : 
+                        rawProvider.toUpperCase().includes('NINJA') ? 'APINinjas' :
                         rawProvider.toUpperCase().includes('PRICE') ? 'GoldPriceAPI' : 'GoldAPI';
         } else if (typeof data.activeKey === 'string') {
           apiKey = data.activeKey;
@@ -119,6 +120,12 @@ async function startServer() {
           if (response.data.success === false) {
             throw new Error(`GoldPriceAPI Error: ${response.data.error?.message || 'Unknown error'}`);
           }
+          return Number(response.data.price) || 0;
+        } else if (provider === 'APINinjas') {
+          const response = await axios.get(`https://api.api-ninjas.com/v1/goldprice`, { 
+            headers: { 'X-Api-Key': key },
+            timeout: 10000 
+          });
           return Number(response.data.price) || 0;
         } else {
           // GoldAPI.io
@@ -190,6 +197,7 @@ async function startServer() {
         let pProv = "GoldAPI";
         const rawP = p.provider?.toUpperCase() || "";
         if (rawP.includes('METAL')) pProv = 'MetalPrice';
+        else if (rawP.includes('NINJA')) pProv = 'APINinjas';
         else if (rawP.includes('PRICE')) pProv = 'GoldPriceAPI';
         keysToTry.push({ key: p.key, provider: pProv, isPrimary: false });
       });
@@ -237,7 +245,7 @@ async function startServer() {
                               (errorDetail && (errorDetail.includes('Invalid API Key') || errorDetail.includes('Invalid key')));
           
           if (isInvalidKey) {
-            const providersToTry = ['GoldAPI', 'MetalPrice', 'GoldPriceAPI'].filter(p => p !== item.provider);
+            const providersToTry = ['GoldAPI', 'MetalPrice', 'GoldPriceAPI', 'APINinjas'].filter(p => p !== item.provider);
             for (const otherProvider of providersToTry) {
               try {
                 console.log(`Trying cross-provider fallback: ${otherProvider}...`);

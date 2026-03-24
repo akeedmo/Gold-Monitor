@@ -254,7 +254,7 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
       </div>
 
       {/* Price Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
         {prices.map((item: any) => (
           <div key={item.id} className="bg-card p-6 rounded-2xl border border-gold/10 card-shadow transition-all hover:-translate-y-1">
             <div className="flex justify-between items-start mb-4">
@@ -274,6 +274,25 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
             </div>
           </div>
         ))}
+
+        {/* Ounce Price Card */}
+        <div className="bg-card p-6 rounded-2xl border border-gold/10 card-shadow transition-all hover:-translate-y-1">
+          <div className="flex justify-between items-start mb-4">
+            <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center text-primary">
+              <Globe size={20} />
+            </div>
+            <div className={`text-xs font-bold px-2 py-1 rounded-full ${prices[0]?.change >= 0 ? 'bg-up/10 text-up' : 'bg-down/10 text-down'}`}>
+              {prices[0]?.change >= 0 ? '+' : ''}{(prices[0]?.changePercent || 0).toFixed(2)}%
+            </div>
+          </div>
+          <h3 className="text-gray-500 text-xs font-bold mb-1">{language === 'ar' ? 'سعر الأونصة (الأوقية)' : language === 'tr' ? 'Ons Fiyatı' : 'Ounce Price'}</h3>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-white">
+              {(prices[0]?.price * 31.1035).toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+            <span className="text-primary text-xs font-bold">{currency}</span>
+          </div>
+        </div>
       </div>
 
       {/* Share Button Below Prices */}

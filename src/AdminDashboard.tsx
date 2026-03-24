@@ -5,6 +5,7 @@ import {
   Calendar, 
   TrendingUp, 
   ArrowLeft, 
+  ArrowRight,
   Lock,
   Eye,
   Clock,
@@ -26,7 +27,9 @@ import {
   Key,
   AlertTriangle,
   HelpCircle,
-  ExternalLink
+  ExternalLink,
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -364,6 +367,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
 
   const [testLoading, setTestLoading] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [previewPrice, setPreviewPrice] = useState<number | null>(null);
 
   const handleTestKey = async (keyToTest: string, provider: string = 'GoldAPI') => {
     if (!keyToTest) {
@@ -372,11 +376,14 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     }
     setTestLoading(true);
     setTestResult(null);
+    setPreviewPrice(null);
     try {
       let success = false;
       let message = '';
+      let fetchedPrice = 0;
       
       const normalizedProvider = provider.toUpperCase().includes('METAL') ? 'MetalPrice' : 
+                                 provider.toUpperCase().includes('NINJA') ? 'APINinjas' :
                                  provider.toUpperCase().includes('PRICE') ? 'GoldPriceAPI' : 'GoldAPI';
 
       if (normalizedProvider === 'MetalPrice') {
@@ -385,6 +392,10 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
             timeout: 10000
           });
           success = response.data.success;
+          if (success) {
+            const xauRate = Number(response.data.rates?.XAU);
+            fetchedPrice = xauRate ? (1 / xauRate) : 0;
+          }
           message = success ? 'المفتاح يعمل بنجاح!' : `فشل الاختبار: ${response.data.error?.info || 'مفتاح غير صالح'}`;
         } catch (err: any) {
           if (err.response?.status === 403) {
@@ -399,10 +410,27 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
             timeout: 10000
           });
           success = response.data.success;
+          if (success) fetchedPrice = Number(response.data.price) || 0;
           message = success ? 'المفتاح يعمل بنجاح!' : `فشل الاختبار: ${response.data.error?.message || 'مفتاح غير صالح'}`;
         } catch (err: any) {
           if (err.response?.status === 403) {
             message = `فشل الاختبار: (403) المفتاح غير صالح أو انتهت صلاحيته لمزود الخدمة (${normalizedProvider})`;
+          } else {
+            throw err;
+          }
+        }
+      } else if (normalizedProvider === 'APINinjas') {
+        try {
+          const response = await axios.get(`https://api.api-ninjas.com/v1/goldprice`, {
+            headers: { 'X-Api-Key': keyToTest },
+            timeout: 10000
+          });
+          success = !!response.data.price;
+          if (success) fetchedPrice = Number(response.data.price) || 0;
+          message = success ? 'المفتاح يعمل بنجاح!' : `فشل الاختبار: مفتاح غير صالح`;
+        } catch (err: any) {
+          if (err.response?.status === 400 || err.response?.status === 403) {
+            message = `فشل الاختبار: (${err.response?.status}) المفتاح غير صالح أو انتهت صلاحيته لمزود الخدمة (${normalizedProvider})`;
           } else {
             throw err;
           }
@@ -419,6 +447,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
             timeout: 10000
           });
           success = !!response.data.price;
+          if (success) fetchedPrice = Number(response.data.price) || 0;
           message = success ? 'المفتاح يعمل بنجاح!' : `فشل الاختبار: ${response.data.error || 'لم يتم استلام بيانات السعر'}`;
         } catch (err: any) {
           if (err.response?.status === 403) {
@@ -432,7 +461,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
       
       if (!success) {
         // Try cross-provider fallback in test
-        const otherProviders = ['GoldAPI', 'MetalPrice', 'GoldPriceAPI'].filter(p => p !== normalizedProvider);
+        const otherProviders = ['GoldAPI', 'MetalPrice', 'GoldPriceAPI', 'APINinjas'].filter(p => p !== normalizedProvider);
         for (const other of otherProviders) {
           try {
             console.log(`Testing cross-provider fallback: ${other}...`);
@@ -440,15 +469,25 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
             if (other === 'MetalPrice') {
               const res = await axios.get(`https://api.metalpriceapi.com/v1/latest?api_key=${keyToTest}&base=USD&currencies=XAU`, { timeout: 8000 });
               altSuccess = res.data.success;
+              if (altSuccess) {
+                const xauRate = Number(res.data.rates?.XAU);
+                fetchedPrice = xauRate ? (1 / xauRate) : 0;
+              }
             } else if (other === 'GoldPriceAPI') {
               const res = await axios.get(`https://api.goldpriceapi.com/v1/latest?api_key=${keyToTest}&base=USD&currencies=XAU`, { timeout: 8000 });
               altSuccess = res.data.success;
+              if (altSuccess) fetchedPrice = Number(res.data.price) || 0;
+            } else if (other === 'APINinjas') {
+              const res = await axios.get(`https://api.api-ninjas.com/v1/goldprice`, { headers: { 'X-Api-Key': keyToTest }, timeout: 8000 });
+              altSuccess = !!res.data.price;
+              if (altSuccess) fetchedPrice = Number(res.data.price) || 0;
             } else {
               const res = await axios.get('https://www.goldapi.io/api/XAU/USD', {
                 headers: { 'x-access-token': keyToTest, 'Accept': 'application/json', 'User-Agent': 'GoldPriceApp/1.0' },
                 timeout: 8000
               });
               altSuccess = !!res.data.price;
+              if (altSuccess) fetchedPrice = Number(res.data.price) || 0;
             }
             
             if (altSuccess) {
@@ -461,6 +500,9 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
       }
       
       setTestResult({ success, message });
+      if (success && fetchedPrice > 0) {
+        setPreviewPrice(fetchedPrice);
+      }
     } catch (err: any) {
       console.error("Test key error:", err);
       setTestResult({ success: false, message: 'فشل الاتصال بالخدمة، تأكد من صحة المفتاح والمزود المختار' });
@@ -1264,19 +1306,21 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                       <p className="text-sm text-gray-400">المفتاح النشط حالياً:</p>
                       <span className="text-xs font-bold text-green-500 bg-green-500/10 px-2 py-1 rounded-full">نشط</span>
                     </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <code className="text-primary font-mono bg-black/50 px-3 py-2 rounded-lg flex-1 overflow-x-auto">
-                        {apiKeys.activeKey ? `${apiKeys.activeKey.key} (${apiKeys.activeKey.provider})` : 'لا يوجد مفتاح نشط'}
-                      </code>
-                      <a 
-                        href="https://metalpriceapi.com/dashboard" 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-xs text-primary hover:underline"
-                      >
-                        إدارة المفاتيح
-                      </a>
-                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <div className="flex flex-col gap-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <code className="text-primary font-mono bg-black/50 px-3 py-2 rounded-lg flex-1 overflow-x-auto">
+                          {apiKeys.activeKey ? `${apiKeys.activeKey.key} (${apiKeys.activeKey.provider})` : 'لا يوجد مفتاح نشط'}
+                        </code>
+                        <a 
+                          href="https://metalpriceapi.com/dashboard" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary hover:underline"
+                        >
+                          إدارة المفاتيح
+                        </a>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
                         <button 
                           onClick={() => handleTestKey(apiKeys.activeKey?.key || '', apiKeys.activeKey?.provider || 'GoldAPI')}
                           disabled={testLoading || !apiKeys.activeKey}
@@ -1318,6 +1362,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                         <option value="GoldAPI">GoldAPI (goldapi.io)</option>
                         <option value="MetalPrice">MetalPrice (metalpriceapi.com)</option>
                         <option value="GoldPriceAPI">GoldPriceAPI (goldpriceapi.com)</option>
+                        <option value="APINinjas">API-Ninjas (api-ninjas.com)</option>
                       </select>
                       <button 
                         onClick={handleAddApiKey}
@@ -1339,6 +1384,13 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                               <code className="text-gray-300 font-mono">{item.key}</code>
                             </div>
                             <div className="flex items-center gap-2">
+                              <button 
+                                onClick={() => handleTestKey(item.key, item.provider)}
+                                disabled={testLoading}
+                                className="text-blue-400 hover:text-blue-300 text-xs font-bold disabled:opacity-50"
+                              >
+                                اختبار
+                              </button>
                               <button 
                                 onClick={() => handleSetAsActive(idx)}
                                 className="text-green-400 hover:text-green-300 text-xs font-bold"
@@ -1376,6 +1428,43 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                           </li>
                         ))}
                       </ul>
+                    </div>
+                  )}
+
+                  {testResult && (
+                    <div className={`p-4 rounded-xl text-sm ${testResult.success ? 'bg-green-500/10 border border-green-500/30 text-green-400' : 'bg-red-500/10 border border-red-500/30 text-red-400'}`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        {testResult.success ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
+                        <span className="font-bold">{testResult.message}</span>
+                      </div>
+                      
+                      {testResult.success && previewPrice && (
+                        <div className="mt-4 bg-black/40 rounded-lg p-4 border border-white/5">
+                          <h4 className="text-white font-bold mb-3 border-b border-white/10 pb-2">معاينة الأسعار (دولار أمريكي)</h4>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            <div className="bg-white/5 p-3 rounded-lg flex flex-col items-center justify-center">
+                              <span className="text-gray-400 text-xs mb-1">الأونصة</span>
+                              <span className="text-white font-bold text-lg">${previewPrice.toFixed(2)}</span>
+                            </div>
+                            <div className="bg-white/5 p-3 rounded-lg flex flex-col items-center justify-center">
+                              <span className="text-gray-400 text-xs mb-1">عيار 24</span>
+                              <span className="text-white font-bold text-lg">${(previewPrice / 31.103).toFixed(2)}</span>
+                            </div>
+                            <div className="bg-white/5 p-3 rounded-lg flex flex-col items-center justify-center">
+                              <span className="text-gray-400 text-xs mb-1">عيار 22</span>
+                              <span className="text-white font-bold text-lg">${((previewPrice / 31.103) * (22/24)).toFixed(2)}</span>
+                            </div>
+                            <div className="bg-white/5 p-3 rounded-lg flex flex-col items-center justify-center">
+                              <span className="text-gray-400 text-xs mb-1">عيار 21</span>
+                              <span className="text-white font-bold text-lg">${((previewPrice / 31.103) * (21/24)).toFixed(2)}</span>
+                            </div>
+                            <div className="bg-white/5 p-3 rounded-lg flex flex-col items-center justify-center">
+                              <span className="text-gray-400 text-xs mb-1">عيار 18</span>
+                              <span className="text-white font-bold text-lg">${((previewPrice / 31.103) * (18/24)).toFixed(2)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -1445,7 +1534,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                         <p className="text-white/80 font-bold">1. خطأ "Invalid API Key":</p>
                         <ul className="list-disc list-inside space-y-1">
                           <li>تأكد من نسخ المفتاح بشكل كامل وبدون مسافات.</li>
-                          <li>تأكد من اختيار المزود الصحيح (GoldAPI.io أو MetalPriceAPI).</li>
+                          <li>تأكد من اختيار المزود الصحيح (GoldAPI.io أو MetalPriceAPI أو API-Ninjas).</li>
                           <li>المفاتيح المجانية لها حدود يومية، قد يكون المفتاح قد استهلك حده.</li>
                         </ul>
                       </div>

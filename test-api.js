@@ -2,14 +2,18 @@ import axios from 'axios';
 
 async function test() {
   try {
-    const res = await axios.get('http://localhost:3000/api/gold-price');
-    console.log('Local API:', JSON.stringify(res.data, null, 2));
+    const res = await axios.get('https://api.api-ninjas.com/v1/invalidendpoint', {
+      headers: { 'X-Api-Key': 'invalid_key' }
+    });
+    console.log(res.data);
   } catch (e) {
-    console.error('Local API failed:', e.message);
+    console.error('API-Ninjas failed:', e.response?.status, e.response?.data || e.message);
   }
 }
 
 test();
+
+
 
 
 
