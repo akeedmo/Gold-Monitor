@@ -51,6 +51,17 @@ interface Stats {
   totalNews: number;
 }
 
+interface ApiKey {
+  key: string;
+  provider: string;
+}
+
+interface ApiKeysState {
+  activeKey: ApiKey | null;
+  pendingKeys: ApiKey[];
+  expiredKeys: string[];
+}
+
 export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   const { t, language, isRTL } = useTranslation();
   const locale = language === 'ar' ? 'ar-SA' : language === 'tr' ? 'tr-TR' : 'en-US';
@@ -59,7 +70,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [settings, setSettings] = useState<any>({});
   const [exchangeRates, setExchangeRates] = useState<any>({});
-  const [apiKeys, setApiKeys] = useState({ activeKey: null as { key: string, provider: string } | null, pendingKeys: [] as { key: string, provider: string }[], expiredKeys: string[] });
+  const [apiKeys, setApiKeys] = useState<ApiKeysState>({ activeKey: null, pendingKeys: [], expiredKeys: [] });
   const [newApiKey, setNewApiKey] = useState('');
   const [visitors, setVisitors] = useState<any[]>([]);
   const [news, setNews] = useState<any[]>([]);
