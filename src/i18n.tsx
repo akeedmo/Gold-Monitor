@@ -29,6 +29,7 @@ export const translations: Translations = {
   "BHD": { ar: 'البحرين', en: 'Bahrain', tr: 'Bahreyn' },
   "OMR": { ar: 'عمان', en: 'Oman', tr: 'Umman' },
   "YER": { ar: 'اليمن', en: 'Yemen', tr: 'Yemen' },
+  "TRY": { ar: 'تركيا', en: 'Turkey', tr: 'Türkiye' },
   "share_description": {
     ar: "تابع أسعار الذهب العالمية والمحلية لحظة بلحظة مع أدق التحليلات والأخبار الاقتصادية. وجهتك الأولى للاستثمار الآمن.",
     en: "Follow global and local gold prices moment by moment with the most accurate analysis and economic news. Your first destination for safe investment.",

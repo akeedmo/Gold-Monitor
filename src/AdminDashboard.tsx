@@ -23,7 +23,9 @@ import {
   X,
   RefreshCw,
   Globe,
-  Key
+  Key,
+  AlertTriangle,
+  HelpCircle
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -60,6 +62,13 @@ interface ApiKeysState {
   activeKey: ApiKey | null;
   pendingKeys: ApiKey[];
   expiredKeys: string[];
+  manualPriceMode: boolean;
+  manualPrice: number;
+  lastError?: {
+    message: string;
+    timestamp: string;
+  };
+  lastSuccess?: string;
 }
 
 export default function AdminDashboard({ onBack }: { onBack: () => void }) {
@@ -70,7 +79,13 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [settings, setSettings] = useState<any>({});
   const [exchangeRates, setExchangeRates] = useState<any>({});
-  const [apiKeys, setApiKeys] = useState<ApiKeysState>({ activeKey: null, pendingKeys: [], expiredKeys: [] });
+  const [apiKeys, setApiKeys] = useState<ApiKeysState>({ 
+    activeKey: null, 
+    pendingKeys: [], 
+    expiredKeys: [],
+    manualPriceMode: false,
+    manualPrice: 2150
+  });
   const [newApiKey, setNewApiKey] = useState('');
   const [visitors, setVisitors] = useState<any[]>([]);
   const [news, setNews] = useState<any[]>([]);
@@ -110,18 +125,47 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     return () => unsubscribe();
   }, []);
 
+  const [passwordConfirmed, setPasswordConfirmed] = useState(false);
+
   const handleGoogleLogin = async () => {
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      setLoading(true);
-      setError('');
-    } catch (err: any) {
-      if (err.code === 'auth/popup-closed-by-user') {
-        console.log('User closed the login popup');
-        return;
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      
+      // Check if user is admin
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      const isAdmin = userDoc.exists() && userDoc.data().role === 'admin';
+      const isDefaultAdmin = user.email === "qydalrfyd@gmail.com";
+      
+      if (isAdmin || isDefaultAdmin) {
+        setUser(user);
+        setToken('firebase-auth-active');
+        setError('');
+      } else {
+        setError('غير مصرح لك بالدخول كمدير');
+        auth.signOut();
       }
-      setError(err.message || 'Google login failed');
+    } catch (err: any) {
+      setError(err.message || 'فشل تسجيل الدخول عبر جوجل');
+    }
+  };
+
+  const confirmPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const adminDoc = await getDoc(doc(db, 'settings', 'admin'));
+      const actualPassword = adminDoc.exists() && adminDoc.data().password ? adminDoc.data().password : 'admin123';
+      
+      if (password === actualPassword) {
+        setPasswordConfirmed(true);
+      } else {
+        setError('كلمة المرور غير صحيحة');
+      }
+    } catch (err: any) {
+      setError('خطأ في التحقق من كلمة المرور');
     } finally {
       setLoading(false);
     }
@@ -157,28 +201,6 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     } catch (err: any) {
       console.error("Password change error:", err);
       setError(t('error_password_change_failed'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    try {
-      const adminDoc = await getDoc(doc(db, 'settings', 'admin'));
-      const actualPassword = adminDoc.exists() && adminDoc.data().password ? adminDoc.data().password : 'admin123';
-      
-      if (password === actualPassword) {
-        const mockToken = 'mock_token_' + Date.now();
-        localStorage.setItem('admin_token', mockToken);
-        setToken(mockToken);
-      } else {
-        throw new Error('كلمة المرور غير صحيحة');
-      }
-    } catch (err: any) {
-      setError(err.message || 'Login failed');
     } finally {
       setLoading(false);
     }
@@ -220,23 +242,42 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
       const notifRes = { data: [] };
       const subsRes = { data: [] };
       
-      let ratesData = { YER_SANAA: 530, YER_ADEN: 1650 };
+      const defaults = { 
+        YER_SANAA: 530, 
+        YER_ADEN: 1650,
+        SAR: 3.75,
+        AED: 3.67,
+        EUR: 0.92,
+        EGP: 47.0,
+        TRY: 32.0,
+        GBP: 0.79,
+        KWD: 0.31,
+        QAR: 3.64,
+        BHD: 0.38,
+        OMR: 0.38,
+        JOD: 0.71,
+        LYD: 4.8
+      };
+      let ratesData = { ...defaults };
       try {
         const ratesDoc = await getDoc(doc(db, 'settings', 'exchangeRates'));
         if (ratesDoc.exists()) {
-          ratesData = ratesDoc.data() as any;
+          ratesData = { ...defaults, ...ratesDoc.data() };
         }
       } catch (e) {
         console.error("Failed to fetch exchange rates from Firestore", e);
       }
 
-      let apiKeysData = { activeKey: '', pendingKeys: [] as string[], expiredKeys: [] as string[] };
+      let apiKeysData: any = { activeKey: null, pendingKeys: [], expiredKeys: [], manualPriceMode: false, manualPrice: 2150 };
       try {
         const keysDoc = await getDoc(doc(db, 'settings', 'apiKeys'));
         if (keysDoc.exists()) {
-          apiKeysData = keysDoc.data() as any;
-        } else {
-          apiKeysData = { activeKey: "1bda868b4ac2385f9e5ceb205450a0f8", pendingKeys: [], expiredKeys: [] };
+          const data = keysDoc.data();
+          apiKeysData = {
+            ...apiKeysData,
+            ...data,
+            manualPrice: Number(data.manualPrice) || 2150
+          };
         }
       } catch (e) {
         console.error("Failed to fetch api keys from Firestore", e);
@@ -251,14 +292,12 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
       setSubscribers(subsRes.data);
     } catch (err) {
       console.error("fetchData error:", err);
-      // localStorage.removeItem('admin_token');
-      // setToken(null);
     }
   };
 
   useEffect(() => {
-    if (token) fetchData();
-  }, [token]);
+    if (token && passwordConfirmed) fetchData();
+  }, [token, passwordConfirmed]);
 
   const handleSaveSettings = async () => {
     setSaveLoading(true);
@@ -290,18 +329,42 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
 
   const handleAddApiKey = () => {
     if (!newApiKey.trim()) return;
-    setApiKeys(prev => ({
-      ...prev,
-      pendingKeys: [...(prev.pendingKeys || []), { key: newApiKey.trim(), provider: newApiProvider }]
-    }));
+    const newKeyObj = { key: newApiKey.trim(), provider: newApiProvider };
+    setApiKeys(prev => {
+      // If no active key, set this one as active immediately
+      if (!prev.activeKey) {
+        return {
+          ...prev,
+          activeKey: newKeyObj
+        };
+      }
+      return {
+        ...prev,
+        pendingKeys: [...(prev.pendingKeys || []), newKeyObj]
+      };
+    });
     setNewApiKey('');
     setNewApiProvider('MetalPrice');
+  };
+
+  const handleSetAsActive = (idx: number) => {
+    setApiKeys(prev => {
+      const keyToActivate = prev.pendingKeys[idx];
+      const newPending = prev.pendingKeys.filter((_, i) => i !== idx);
+      const newExpired = prev.activeKey ? [...(prev.expiredKeys || []), prev.activeKey.key] : (prev.expiredKeys || []);
+      return {
+        ...prev,
+        activeKey: keyToActivate,
+        pendingKeys: newPending,
+        expiredKeys: newExpired
+      };
+    });
   };
 
   const [testLoading, setTestLoading] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
-  const handleTestKey = async (keyToTest: string) => {
+  const handleTestKey = async (keyToTest: string, provider: string = 'GoldAPI') => {
     if (!keyToTest) {
       setTestResult({ success: false, message: 'لا يوجد مفتاح للاختبار' });
       return;
@@ -309,18 +372,97 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     setTestLoading(true);
     setTestResult(null);
     try {
-      // Test the key by making a request to the gold price API
-      const response = await axios.get(`https://api.metalpriceapi.com/v1/latest?api_key=${keyToTest}&base=USD&currencies=XAU`, {
-        timeout: 10000
-      });
+      let success = false;
+      let message = '';
       
-      if (response.data.success) {
-        setTestResult({ success: true, message: 'المفتاح يعمل بنجاح!' });
+      const normalizedProvider = provider.toUpperCase().includes('METAL') ? 'MetalPrice' : 
+                                 provider.toUpperCase().includes('PRICE') ? 'GoldPriceAPI' : 'GoldAPI';
+
+      if (normalizedProvider === 'MetalPrice') {
+        try {
+          const response = await axios.get(`https://api.metalpriceapi.com/v1/latest?api_key=${keyToTest}&base=USD&currencies=XAU`, {
+            timeout: 10000
+          });
+          success = response.data.success;
+          message = success ? 'المفتاح يعمل بنجاح!' : `فشل الاختبار: ${response.data.error?.info || 'مفتاح غير صالح'}`;
+        } catch (err: any) {
+          if (err.response?.status === 403) {
+            message = `فشل الاختبار: (403) المفتاح غير صالح أو انتهت صلاحيته لمزود الخدمة (${normalizedProvider})`;
+          } else {
+            throw err;
+          }
+        }
+      } else if (normalizedProvider === 'GoldPriceAPI') {
+        try {
+          const response = await axios.get(`https://api.goldpriceapi.com/v1/latest?api_key=${keyToTest}&base=USD&currencies=XAU`, {
+            timeout: 10000
+          });
+          success = response.data.success;
+          message = success ? 'المفتاح يعمل بنجاح!' : `فشل الاختبار: ${response.data.error?.message || 'مفتاح غير صالح'}`;
+        } catch (err: any) {
+          if (err.response?.status === 403) {
+            message = `فشل الاختبار: (403) المفتاح غير صالح أو انتهت صلاحيته لمزود الخدمة (${normalizedProvider})`;
+          } else {
+            throw err;
+          }
+        }
       } else {
-        setTestResult({ success: false, message: `فشل الاختبار: ${response.data.error?.info || 'مفتاح غير صالح'}` });
+        // GoldAPI
+        try {
+          const response = await axios.get('https://www.goldapi.io/api/XAU/USD', {
+            headers: { 
+              'x-access-token': keyToTest,
+              'Accept': 'application/json',
+              'User-Agent': 'GoldPriceApp/1.0'
+            },
+            timeout: 10000
+          });
+          success = !!response.data.price;
+          message = success ? 'المفتاح يعمل بنجاح!' : `فشل الاختبار: ${response.data.error || 'لم يتم استلام بيانات السعر'}`;
+        } catch (err: any) {
+          if (err.response?.status === 403) {
+            const errorMsg = err.response?.data?.error || 'المفتاح غير صالح أو انتهت صلاحيته';
+            message = `فشل الاختبار: (403) ${errorMsg} لمزود الخدمة (${normalizedProvider})`;
+          } else {
+            throw err;
+          }
+        }
       }
+      
+      if (!success) {
+        // Try cross-provider fallback in test
+        const otherProviders = ['GoldAPI', 'MetalPrice', 'GoldPriceAPI'].filter(p => p !== normalizedProvider);
+        for (const other of otherProviders) {
+          try {
+            console.log(`Testing cross-provider fallback: ${other}...`);
+            let altSuccess = false;
+            if (other === 'MetalPrice') {
+              const res = await axios.get(`https://api.metalpriceapi.com/v1/latest?api_key=${keyToTest}&base=USD&currencies=XAU`, { timeout: 8000 });
+              altSuccess = res.data.success;
+            } else if (other === 'GoldPriceAPI') {
+              const res = await axios.get(`https://api.goldpriceapi.com/v1/latest?api_key=${keyToTest}&base=USD&currencies=XAU`, { timeout: 8000 });
+              altSuccess = res.data.success;
+            } else {
+              const res = await axios.get('https://www.goldapi.io/api/XAU/USD', {
+                headers: { 'x-access-token': keyToTest, 'Accept': 'application/json', 'User-Agent': 'GoldPriceApp/1.0' },
+                timeout: 8000
+              });
+              altSuccess = !!res.data.price;
+            }
+            
+            if (altSuccess) {
+              success = true;
+              message = `المفتاح يعمل بنجاح! (ملاحظة: يبدو أن المفتاح مخصص لمزود الخدمة ${other} بدلاً من ${normalizedProvider})`;
+              break;
+            }
+          } catch (e) { /* ignore */ }
+        }
+      }
+      
+      setTestResult({ success, message });
     } catch (err: any) {
-      setTestResult({ success: false, message: 'فشل الاتصال بالخدمة، تأكد من اتصال الإنترنت أو صحة المفتاح' });
+      console.error("Test key error:", err);
+      setTestResult({ success: false, message: 'فشل الاتصال بالخدمة، تأكد من صحة المفتاح والمزود المختار' });
     } finally {
       setTestLoading(false);
     }
@@ -330,6 +472,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     setApiKeys(prev => {
       const newExpired = prev.activeKey ? [...(prev.expiredKeys || []), prev.activeKey.key] : (prev.expiredKeys || []);
       return {
+        ...prev,
         activeKey: null,
         pendingKeys: prev.pendingKeys || [],
         expiredKeys: newExpired
@@ -343,6 +486,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
       const newActive = (prev.pendingKeys && prev.pendingKeys.length > 0) ? prev.pendingKeys[0] : null;
       const newPending = (prev.pendingKeys && prev.pendingKeys.length > 0) ? prev.pendingKeys.slice(1) : [];
       return {
+        ...prev,
         activeKey: newActive,
         pendingKeys: newPending,
         expiredKeys: newExpired
@@ -354,10 +498,22 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     setSaveLoading(true);
     setError('');
     try {
+      console.log("Saving API keys to Firestore:", apiKeys);
       await setDoc(doc(db, 'settings', 'apiKeys'), apiKeys);
+      
+      // Force refresh server cache after saving new keys
+      try {
+        await axios.get('/api/gold-price?force=true');
+        console.log("Server cache refreshed successfully");
+      } catch (refreshErr) {
+        console.warn("Failed to force refresh server cache:", refreshErr);
+      }
+      
       showSuccess(t('success_settings_saved') || 'تم حفظ المفاتيح بنجاح');
-    } catch (err) {
-      setError(t('error_settings_save_failed') || 'فشل حفظ المفاتيح');
+    } catch (err: any) {
+      console.error("Error saving API keys:", err);
+      const errorMessage = err.message || t('error_settings_save_failed') || 'فشل حفظ المفاتيح';
+      setError(`فشل حفظ المفاتيح: ${errorMessage}`);
     } finally {
       setSaveLoading(false);
     }
@@ -416,48 +572,42 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     }
   };
 
-  if (!token) {
+  if (!user) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center p-6" dir={isRTL ? "rtl" : "ltr"}>
-        <div className="bg-card p-8 rounded-2xl shadow-xl w-full max-w-md border border-gold/10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <div className="flex flex-col items-center mb-8">
-            <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-4">
-              <Lock className="text-primary" size={32} />
-            </div>
-            <h2 className="text-2xl font-bold text-white">{t('admin_dashboard')}</h2>
-            <p className="text-gray-400 text-sm">{t('enter_password')}</p>
-          </div>
-          <form onSubmit={handleLogin} className="space-y-6">
+        <div className="bg-card p-8 rounded-2xl shadow-xl w-full max-w-md border border-gold/10">
+          <h2 className="text-2xl font-bold text-white mb-6 text-center">{t('admin_dashboard')}</h2>
+          <button 
+            onClick={handleGoogleLogin} 
+            className="w-full py-4 bg-white/5 border border-white/10 text-white rounded-xl font-bold hover:bg-white/10 transition-all flex items-center justify-center gap-3"
+          >
+            <Globe size={20} className="text-primary" />
+            {t('login_with_google') || 'الدخول عبر جوجل'}
+          </button>
+          {error && <p className="text-red-500 text-xs mt-4 text-center">{error}</p>}
+        </div>
+      </div>
+    );
+  }
+
+  if (!passwordConfirmed) {
+    return (
+      <div className="min-h-screen bg-bg flex items-center justify-center p-6" dir={isRTL ? "rtl" : "ltr"}>
+        <div className="bg-card p-8 rounded-2xl shadow-xl w-full max-w-md border border-gold/10">
+          <h2 className="text-2xl font-bold text-white mb-6 text-center">تأكيد كلمة المرور</h2>
+          <form onSubmit={confirmPassword} className="space-y-4">
             <input 
               type="password" 
-              placeholder={t('password')}
+              placeholder="أدخل كلمة المرور"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-colors"
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary"
               autoFocus
             />
             {error && <p className="text-red-500 text-xs">{error}</p>}
-            <button type="submit" disabled={loading} className="w-full py-4 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all disabled:opacity-50">
-              {loading ? t('verifying') : t('login')}
+            <button type="submit" disabled={loading} className="w-full py-4 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all">
+              {loading ? 'جاري التحقق...' : 'تأكيد'}
             </button>
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-white/10"></div>
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-gray-500">{t('or_continue_with') || 'أو المتابعة عبر'}</span>
-              </div>
-            </div>
-            <button 
-              type="button" 
-              onClick={handleGoogleLogin} 
-              disabled={loading} 
-              className="w-full py-4 bg-white/5 border border-white/10 text-white rounded-xl font-bold hover:bg-white/10 transition-all flex items-center justify-center gap-3"
-            >
-              <Globe size={20} className="text-primary" />
-              {t('login_with_google') || 'الدخول عبر جوجل'}
-            </button>
-            <button type="button" onClick={onBack} className="w-full py-2 text-gray-400 text-sm hover:text-primary transition-colors">{t('back_to_site')}</button>
           </form>
         </div>
       </div>
@@ -882,12 +1032,27 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {Object.keys(exchangeRates).sort().map(currency => (
-                    <div key={currency} className="space-y-2">
-                      <label className="text-xs font-bold text-gray-500 block">
-                        {currency === 'YER_SANAA' ? t('yer_sanaa') : 
-                         currency === 'YER_ADEN' ? t('yer_aden') : 
-                         currency}
-                      </label>
+                    <div key={currency} className="space-y-2 group">
+                      <div className="flex justify-between items-center">
+                        <label className="text-xs font-bold text-gray-500 block">
+                          {currency === 'YER_SANAA' ? t('yer_sanaa') : 
+                           currency === 'YER_ADEN' ? t('yer_aden') : 
+                           currency}
+                        </label>
+                        {/* Don't allow deleting YER rates as they are core */}
+                        {!currency.startsWith('YER_') && (
+                          <button 
+                            onClick={() => {
+                              const newRates = { ...exchangeRates };
+                              delete newRates[currency];
+                              setExchangeRates(newRates);
+                            }}
+                            className="text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        )}
+                      </div>
                       <div className="relative">
                         <input 
                           type="number" 
@@ -899,6 +1064,32 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                       </div>
                     </div>
                   ))}
+                </div>
+
+                <div className="pt-6 border-t border-white/5 space-y-4">
+                  <h4 className="text-sm font-bold text-white">إضافة عملة جديدة:</h4>
+                  <div className="flex gap-4">
+                    <input 
+                      type="text" 
+                      placeholder="رمز العملة (مثلاً: SAR)"
+                      id="newCurrencyCode"
+                      className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-primary uppercase"
+                    />
+                    <button 
+                      onClick={() => {
+                        const input = document.getElementById('newCurrencyCode') as HTMLInputElement;
+                        const code = input.value.trim().toUpperCase();
+                        if (code && !exchangeRates[code]) {
+                          setExchangeRates({ ...exchangeRates, [code]: 1 });
+                          input.value = '';
+                        }
+                      }}
+                      className="px-6 bg-primary/10 text-primary border border-primary/20 rounded-xl font-bold hover:bg-primary/20 transition-all flex items-center gap-2"
+                    >
+                      <Plus size={18} />
+                      إضافة
+                    </button>
+                  </div>
                 </div>
 
                 <div className="pt-4">
@@ -1017,6 +1208,42 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                 </h3>
                 
                 <div className="space-y-4">
+                  <div className="bg-white/5 p-4 rounded-xl border border-white/10 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-bold text-white">وضع التسعير اليدوي (Manual Price Mode)</p>
+                        <p className="text-[10px] text-gray-400">تفعيل هذا الخيار سيجعل الموقع يستخدم السعر المحدد أدناه بدلاً من جلب السعر من الـ API.</p>
+                      </div>
+                      <button 
+                        onClick={() => setApiKeys(prev => ({ ...prev, manualPriceMode: !prev.manualPriceMode }))}
+                        className={`w-12 h-6 rounded-full transition-all relative ${apiKeys.manualPriceMode ? 'bg-primary' : 'bg-gray-600'}`}
+                      >
+                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${apiKeys.manualPriceMode ? 'left-7' : 'left-1'}`} />
+                      </button>
+                    </div>
+                    
+                    {apiKeys.manualPriceMode && (
+                      <div className="flex items-center gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <div className="flex-1">
+                          <label className="text-[10px] text-gray-400 block mb-1">سعر الأونصة العالمي (USD):</label>
+                          <div className="relative">
+                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                            <input 
+                              type="number" 
+                              value={apiKeys.manualPrice}
+                              onChange={(e) => setApiKeys(prev => ({ ...prev, manualPrice: parseFloat(e.target.value) || 0 }))}
+                              className="w-full bg-black/40 border border-white/10 rounded-lg pl-8 pr-4 py-2 text-white focus:outline-none focus:border-primary transition-colors text-sm"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-[10px] text-gray-400 block mb-1">السعر الحالي المعروض:</p>
+                          <p className="text-lg font-bold text-primary">{(Number.isFinite(apiKeys.manualPrice) ? apiKeys.manualPrice : 0).toLocaleString()} $</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="bg-white/5 p-4 rounded-xl border border-white/10">
                     <div className="flex justify-between items-center mb-2">
                       <p className="text-sm text-gray-400">المفتاح النشط حالياً:</p>
@@ -1036,7 +1263,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                       </a>
                       <div className="flex flex-wrap items-center gap-2 mt-2">
                         <button 
-                          onClick={() => handleTestKey(apiKeys.activeKey?.key || '')}
+                          onClick={() => handleTestKey(apiKeys.activeKey?.key || '', apiKeys.activeKey?.provider || 'GoldAPI')}
                           disabled={testLoading || !apiKeys.activeKey}
                           className="bg-blue-500/20 text-blue-500 hover:bg-blue-500/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors whitespace-nowrap disabled:opacity-50"
                         >
@@ -1068,21 +1295,21 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                         placeholder="أدخل مفتاح API جديد..."
                         className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary transition-colors"
                       />
-                      <div className="flex gap-2">
-                        <input 
-                          type="text" 
-                          value={newApiProvider}
-                          onChange={(e) => setNewApiProvider(e.target.value)}
-                          placeholder="اسم المزود (مثال: MetalPrice)..."
-                          className="flex-1 bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary transition-colors"
-                        />
-                        <button 
-                          onClick={handleAddApiKey}
-                          className="bg-primary/20 text-primary hover:bg-primary/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors"
-                        >
-                          إضافة
-                        </button>
-                      </div>
+                      <select
+                        value={newApiProvider}
+                        onChange={(e) => setNewApiProvider(e.target.value)}
+                        className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary transition-colors text-sm"
+                      >
+                        <option value="GoldAPI">GoldAPI (goldapi.io)</option>
+                        <option value="MetalPrice">MetalPrice (metalpriceapi.com)</option>
+                        <option value="GoldPriceAPI">GoldPriceAPI (goldpriceapi.com)</option>
+                      </select>
+                      <button 
+                        onClick={handleAddApiKey}
+                        className="w-full bg-primary/20 text-primary hover:bg-primary/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors"
+                      >
+                        إضافة
+                      </button>
                     </div>
                   </div>
 
@@ -1096,17 +1323,25 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                               <span className="text-xs text-gray-400">{item.provider}</span>
                               <code className="text-gray-300 font-mono">{item.key}</code>
                             </div>
-                            <button 
-                              onClick={() => {
-                                setApiKeys(prev => ({
-                                  ...prev,
-                                  pendingKeys: prev.pendingKeys.filter((_, i) => i !== idx)
-                                }));
-                              }}
-                              className="text-red-400 hover:text-red-300"
-                            >
-                              <Trash2 size={16} />
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button 
+                                onClick={() => handleSetAsActive(idx)}
+                                className="text-green-400 hover:text-green-300 text-xs font-bold"
+                              >
+                                تفعيل
+                              </button>
+                              <button 
+                                onClick={() => {
+                                  setApiKeys(prev => ({
+                                    ...prev,
+                                    pendingKeys: prev.pendingKeys.filter((_, i) => i !== idx)
+                                  }));
+                                }}
+                                className="text-red-400 hover:text-red-300"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
                           </li>
                         ))}
                       </ul>
@@ -1129,14 +1364,91 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                     </div>
                   )}
 
-                  <button 
-                    onClick={handleSaveApiKeys} 
-                    disabled={saveLoading} 
-                    className="w-full py-3 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-xl disabled:opacity-50 mt-4"
-                  >
-                    {saveLoading ? <RefreshCw className="animate-spin" size={18} /> : <Save size={18} />}
-                    حفظ تغييرات المفاتيح
-                  </button>
+                  {apiKeys.lastSuccess && (
+                    <div className="bg-green-500/10 border border-green-500/20 p-4 rounded-xl animate-in fade-in slide-in-from-top-2 duration-300">
+                      <div className="flex items-center gap-2 text-green-500 mb-1">
+                        <RefreshCw size={16} />
+                        <span className="text-xs font-bold">آخر تحديث ناجح للأسعار:</span>
+                      </div>
+                      <p className="text-[10px] text-green-400 font-mono">{new Date(apiKeys.lastSuccess).toLocaleString()}</p>
+                    </div>
+                  )}
+
+                  {apiKeys.lastError && (
+                    <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl animate-in fade-in slide-in-from-top-2 duration-300">
+                      <div className="flex items-center gap-2 text-red-500 mb-1">
+                        <AlertTriangle size={16} />
+                        <span className="text-xs font-bold">آخر خطأ تم رصده من الـ API:</span>
+                      </div>
+                      <p className="text-[10px] text-red-400 font-mono break-all">{apiKeys.lastError.message}</p>
+                      <p className="text-[9px] text-gray-500 mt-1">توقيت الخطأ: {new Date(apiKeys.lastError.timestamp).toLocaleString()}</p>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between gap-4 mt-4">
+                    <button 
+                      onClick={async () => {
+                        setSaveLoading(true);
+                        try {
+                          const res = await axios.get('/api/gold-price?force=true');
+                          if (res.data.isFallback) {
+                            showSuccess('تم التحديث، ولكن السعر الحالي هو سعر احتياطي (Fallback)');
+                          } else {
+                            showSuccess(`تم تحديث الأسعار بنجاح! السعر الحالي: $${res.data.price}`);
+                          }
+                        } catch (err) {
+                          setError('فشل تحديث الأسعار من الخادم');
+                        } finally {
+                          setSaveLoading(false);
+                        }
+                      }}
+                      disabled={saveLoading}
+                      className="flex-1 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold text-white hover:bg-white/10 transition-all flex items-center justify-center gap-2"
+                    >
+                      <RefreshCw className={saveLoading ? "animate-spin" : ""} size={18} />
+                      تحديث الأسعار الآن
+                    </button>
+                    
+                    <button 
+                      onClick={handleSaveApiKeys} 
+                      disabled={saveLoading} 
+                      className="flex-1 py-3 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-xl disabled:opacity-50"
+                    >
+                      {saveLoading ? <RefreshCw className="animate-spin" size={18} /> : <Save size={18} />}
+                      حفظ تغييرات المفاتيح
+                    </button>
+                  </div>
+
+                  {/* Troubleshooting Section */}
+                  <div className="mt-8 p-6 bg-blue-500/5 border border-blue-500/10 rounded-2xl space-y-4">
+                    <h4 className="text-sm font-bold text-blue-400 flex items-center gap-2">
+                      <HelpCircle size={16} />
+                      دليل حل المشكلات (API Troubleshooting)
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[11px] text-gray-400">
+                      <div className="space-y-2">
+                        <p className="text-white/80 font-bold">1. خطأ "Invalid API Key":</p>
+                        <ul className="list-disc list-inside space-y-1">
+                          <li>تأكد من نسخ المفتاح بشكل كامل وبدون مسافات.</li>
+                          <li>تأكد من اختيار المزود الصحيح (GoldAPI.io أو MetalPriceAPI).</li>
+                          <li>المفاتيح المجانية لها حدود يومية، قد يكون المفتاح قد استهلك حده.</li>
+                        </ul>
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-white/80 font-bold">2. الحل السريع عند تعطل الـ API:</p>
+                        <ul className="list-disc list-inside space-y-1">
+                          <li>قم بتفعيل "وضع التسعير اليدوي" في الأعلى.</li>
+                          <li>أدخل السعر الحالي يدوياً ليظهر للمستخدمين فوراً.</li>
+                          <li>هذا يضمن استمرار عمل الموقع حتى تقوم بإصلاح المفاتيح.</li>
+                        </ul>
+                      </div>
+                    </div>
+                    <div className="pt-2 border-t border-blue-500/10">
+                      <p className="text-[10px] text-blue-300/60">
+                        * ملاحظة: النظام يحاول تلقائياً تجربة المفاتيح الاحتياطية (Pending Keys) إذا فشل المفتاح الأساسي.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
 

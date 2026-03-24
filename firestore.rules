@@ -49,10 +49,11 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
       
-      // Specifically allow stats increment for everyone
-      allow create: if settingId == 'stats';
-      allow update: if settingId == 'stats' && 
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['total', 'today', 'week', 'month']);
+      // Allow server-side updates to specific fields without being admin
+      allow update: if (settingId == 'stats' && 
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['latestPrice', 'total', 'today', 'week', 'month', 'history', 'totalNews'])) ||
+        (settingId == 'apiKeys' && 
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastError']));
     }
 
     // Notifications
