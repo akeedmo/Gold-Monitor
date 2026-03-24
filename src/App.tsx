@@ -912,7 +912,9 @@ function AppContent() {
       const fetchCurrency = currency === 'YER' ? 'USD' : currency;
       
       // Direct call to external API
-      let apiKey = import.meta.env.VITE_METALPRICE_API_KEY || "1bda868b4ac2385f9e5ceb205450a0f8";
+      // Fetching API key exclusively from Firestore for security.
+      let apiKey = ""; 
+      
       try {
         const keysDoc = await getDoc(doc(db, 'settings', 'apiKeys'));
         if (keysDoc.exists() && keysDoc.data().activeKey) {
@@ -922,11 +924,16 @@ function AppContent() {
         console.error("Failed to fetch API keys from Firestore", e);
       }
 
-      const priceRes = await axios.get(`https://api.metalpriceapi.com/v1/latest?api_key=${apiKey}&base=${fetchCurrency}&currencies=XAU`, {
+      if (!apiKey) {
+        throw new Error("API key not found in Firestore");
+      }
+
+      const priceRes = await axios.get('https://www.goldapi.io/api/XAU/USD', {
+        headers: { 'x-access-token': apiKey },
         timeout: 10000
       });
       
-      const price = priceRes.data.rates && priceRes.data.rates.XAU ? (1 / priceRes.data.rates.XAU) : 0;
+      const price = priceRes.data.price || 0;
       const latest = { price: price };
       
       let ratesData = { YER_SANAA: 530, YER_ADEN: 1650 };
@@ -979,7 +986,7 @@ function AppContent() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 300000); // 5 min
+    const interval = setInterval(fetchData, 420000); // 7 min (approx 8.5 requests/hour)
     return () => clearInterval(interval);
   }, [currency, yemenRegion]);
 
