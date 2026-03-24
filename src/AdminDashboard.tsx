@@ -59,7 +59,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [settings, setSettings] = useState<any>({});
   const [exchangeRates, setExchangeRates] = useState<any>({});
-  const [apiKeys, setApiKeys] = useState({ activeKey: '', pendingKeys: [] as string[], expiredKeys: [] as string[] });
+  const [apiKeys, setApiKeys] = useState({ activeKey: null as { key: string, provider: string } | null, pendingKeys: [] as { key: string, provider: string }[], expiredKeys: string[] });
   const [newApiKey, setNewApiKey] = useState('');
   const [visitors, setVisitors] = useState<any[]>([]);
   const [news, setNews] = useState<any[]>([]);
@@ -275,13 +275,16 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     }
   };
 
+  const [newApiProvider, setNewApiProvider] = useState('MetalPrice');
+
   const handleAddApiKey = () => {
     if (!newApiKey.trim()) return;
     setApiKeys(prev => ({
       ...prev,
-      pendingKeys: [...(prev.pendingKeys || []), newApiKey.trim()]
+      pendingKeys: [...(prev.pendingKeys || []), { key: newApiKey.trim(), provider: newApiProvider }]
     }));
     setNewApiKey('');
+    setNewApiProvider('MetalPrice');
   };
 
   const [testLoading, setTestLoading] = useState(false);
@@ -314,9 +317,9 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
 
   const handleMarkAsExpired = () => {
     setApiKeys(prev => {
-      const newExpired = prev.activeKey ? [...(prev.expiredKeys || []), prev.activeKey] : (prev.expiredKeys || []);
+      const newExpired = prev.activeKey ? [...(prev.expiredKeys || []), prev.activeKey.key] : (prev.expiredKeys || []);
       return {
-        activeKey: '',
+        activeKey: null,
         pendingKeys: prev.pendingKeys || [],
         expiredKeys: newExpired
       };
@@ -325,8 +328,8 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
 
   const handleSwitchKey = () => {
     setApiKeys(prev => {
-      const newExpired = prev.activeKey ? [...(prev.expiredKeys || []), prev.activeKey] : (prev.expiredKeys || []);
-      const newActive = (prev.pendingKeys && prev.pendingKeys.length > 0) ? prev.pendingKeys[0] : '';
+      const newExpired = prev.activeKey ? [...(prev.expiredKeys || []), prev.activeKey.key] : (prev.expiredKeys || []);
+      const newActive = (prev.pendingKeys && prev.pendingKeys.length > 0) ? prev.pendingKeys[0] : null;
       const newPending = (prev.pendingKeys && prev.pendingKeys.length > 0) ? prev.pendingKeys.slice(1) : [];
       return {
         activeKey: newActive,
@@ -1010,7 +1013,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                     </div>
                     <div className="flex items-center justify-between gap-4">
                       <code className="text-primary font-mono bg-black/50 px-3 py-2 rounded-lg flex-1 overflow-x-auto">
-                        {apiKeys.activeKey || 'لا يوجد مفتاح نشط'}
+                        {apiKeys.activeKey ? `${apiKeys.activeKey.key} (${apiKeys.activeKey.provider})` : 'لا يوجد مفتاح نشط'}
                       </code>
                       <a 
                         href="https://metalpriceapi.com/dashboard" 
@@ -1020,10 +1023,10 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                       >
                         إدارة المفاتيح
                       </a>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
                         <button 
-                          onClick={() => handleTestKey(apiKeys.activeKey)}
-                          disabled={testLoading}
+                          onClick={() => handleTestKey(apiKeys.activeKey?.key || '')}
+                          disabled={testLoading || !apiKeys.activeKey}
                           className="bg-blue-500/20 text-blue-500 hover:bg-blue-500/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors whitespace-nowrap disabled:opacity-50"
                         >
                           {testLoading ? 'جاري الاختبار...' : 'اختبار المفتاح'}
@@ -1046,20 +1049,29 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
 
                   <div className="bg-white/5 p-4 rounded-xl border border-white/10">
                     <p className="text-sm text-gray-400 mb-2">إضافة مفتاح جديد (احتياطي):</p>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col gap-2">
                       <input 
                         type="text" 
                         value={newApiKey}
                         onChange={(e) => setNewApiKey(e.target.value)}
                         placeholder="أدخل مفتاح API جديد..."
-                        className="flex-1 bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary transition-colors"
+                        className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary transition-colors"
                       />
-                      <button 
-                        onClick={handleAddApiKey}
-                        className="bg-primary/20 text-primary hover:bg-primary/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors"
-                      >
-                        إضافة
-                      </button>
+                      <div className="flex gap-2">
+                        <input 
+                          type="text" 
+                          value={newApiProvider}
+                          onChange={(e) => setNewApiProvider(e.target.value)}
+                          placeholder="اسم المزود (مثال: MetalPrice)..."
+                          className="flex-1 bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary transition-colors"
+                        />
+                        <button 
+                          onClick={handleAddApiKey}
+                          className="bg-primary/20 text-primary hover:bg-primary/30 px-4 py-2 rounded-lg text-sm font-bold transition-colors"
+                        >
+                          إضافة
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -1067,9 +1079,12 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                     <div className="bg-white/5 p-4 rounded-xl border border-white/10">
                       <p className="text-sm text-gray-400 mb-2">المفاتيح الاحتياطية ({apiKeys.pendingKeys.length}):</p>
                       <ul className="space-y-2">
-                        {apiKeys.pendingKeys.map((key, idx) => (
+                        {apiKeys.pendingKeys.map((item, idx) => (
                           <li key={idx} className="flex items-center justify-between text-sm bg-black/30 px-3 py-2 rounded-lg">
-                            <code className="text-gray-300 font-mono">{key}</code>
+                            <div className="flex flex-col">
+                              <span className="text-xs text-gray-400">{item.provider}</span>
+                              <code className="text-gray-300 font-mono">{item.key}</code>
+                            </div>
                             <button 
                               onClick={() => {
                                 setApiKeys(prev => ({
