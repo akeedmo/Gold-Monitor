@@ -820,8 +820,6 @@ function AppContent() {
 
   useEffect(() => {
     const trackVisitor = async () => {
-      if (sessionStorage.getItem('visited')) return;
-      sessionStorage.setItem('visited', 'true');
       try {
         const res = await axios.get('https://ipapi.co/json/');
         const { ip, country_name, city } = res.data;

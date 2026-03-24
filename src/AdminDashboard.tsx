@@ -144,6 +144,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
       setPasswordSuccess(t('success_password_changed'));
       setNewPassword('');
     } catch (err: any) {
+      console.error("Password change error:", err);
       setError(t('error_password_change_failed'));
     } finally {
       setLoading(false);
