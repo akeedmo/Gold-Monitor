@@ -937,7 +937,8 @@ function AppContent() {
     try {
       // Fetch gold price from our server-side proxy (which handles caching and rate limits)
       // The server returns the price of 1 ounce of gold in USD.
-      const goldResponse = await axios.get(`/api/gold-price${force ? '?force=true' : ''}`, { timeout: 15000 });
+      const timestamp = new Date().getTime();
+      const goldResponse = await axios.get(`/api/gold-price?t=${timestamp}${force ? '&force=true' : ''}`, { timeout: 15000 });
       const { price, isFallback } = goldResponse.data;
       const goldPriceOunce = Number(price) || 2150;
 

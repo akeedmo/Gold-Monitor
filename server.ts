@@ -51,6 +51,11 @@ async function startServer() {
 
   // Proxy endpoint with caching to avoid rate limits (10 requests/hour)
   app.get("/api/gold-price", async (req, res) => {
+    // Prevent browser caching so the client always gets the latest price
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
     const now = Date.now();
     const force = req.query.force === 'true';
     
@@ -94,15 +99,6 @@ async function startServer() {
                         rawProvider.toUpperCase().includes('PRICE') ? 'GoldPriceAPI' : 'GoldAPI';
         } else if (typeof data.activeKey === 'string') {
           apiKey = data.activeKey;
-        }
-      }
-
-      if (!apiKey) {
-        console.warn("No API key found in Firestore or Environment. Using fallback price.");
-        // If no key, try to use manual price if available, even if mode is off
-        if (manualPrice > 0) {
-          goldPriceCache = { price: manualPrice, timestamp: now, isFallback: true };
-          return res.json(goldPriceCache);
         }
       }
 

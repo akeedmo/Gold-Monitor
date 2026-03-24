@@ -25,7 +25,8 @@ import {
   Globe,
   Key,
   AlertTriangle,
-  HelpCircle
+  HelpCircle,
+  ExternalLink
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -582,12 +583,23 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
           <h2 className="text-2xl font-bold text-white mb-6 text-center">{t('admin_dashboard')}</h2>
           <button 
             onClick={handleGoogleLogin} 
-            className="w-full py-4 bg-white/5 border border-white/10 text-white rounded-xl font-bold hover:bg-white/10 transition-all flex items-center justify-center gap-3"
+            className="w-full py-4 bg-white/5 border border-white/10 text-white rounded-xl font-bold hover:bg-white/10 transition-all flex items-center justify-center gap-3 mb-4"
           >
             <Globe size={20} className="text-primary" />
             {t('login_with_google') || 'الدخول عبر جوجل'}
           </button>
+          <button 
+            onClick={() => window.open('/admin', '_blank')} 
+            className="w-full py-3 bg-transparent border border-primary/30 text-primary rounded-xl font-bold hover:bg-primary/10 transition-all flex items-center justify-center gap-2 text-sm"
+          >
+            <ExternalLink size={16} />
+            فتح في نافذة جديدة (إذا تم حظر النافذة المنبثقة)
+          </button>
           {error && <p className="text-red-500 text-xs mt-4 text-center">{error}</p>}
+          <button onClick={onBack} className="mt-6 w-full py-3 text-gray-400 hover:text-white transition-colors flex items-center justify-center gap-2">
+            <ArrowRight size={16} className={isRTL ? "rotate-180" : ""} />
+            {t('back_to_home')}
+          </button>
         </div>
       </div>
     );
