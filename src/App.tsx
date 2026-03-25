@@ -42,7 +42,6 @@ interface GoldPrice {
   price: number;
   change: number;
   changePercent: number;
-  isFallback?: boolean;
 }
 
 interface ChartData {
@@ -71,7 +70,6 @@ const TickerBar = ({ prices, currency }: { prices: GoldPrice[], currency: string
           <div key={`${item.id}-${idx}`} className="flex items-center gap-3">
             <span className="font-bold text-sm">
               {item.type} - {item.price.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency}
-              {item.isFallback && <span className="text-[8px] ml-1 opacity-50 font-normal">(تقديري)</span>}
             </span>
             <span className={`text-xs ${item.change >= 0 ? "text-up" : "text-down"}`}>
               {item.change >= 0 ? '▲' : '▼'} {Math.abs(item.changePercent).toFixed(2)}%
@@ -960,7 +958,7 @@ function AppContent() {
       // The server returns the price of 1 ounce of gold in USD.
       const timestamp = new Date().getTime();
       const goldResponse = await axios.get(`/api/gold-price?t=${timestamp}${force ? '&force=true' : ''}`, { timeout: 15000 });
-      const { price, isFallback } = goldResponse.data;
+      const { price } = goldResponse.data;
       const goldPriceOunce = Number(price) || 2150;
 
       // Fetch exchange rates from Firestore
@@ -1025,10 +1023,10 @@ function AppContent() {
       const p18 = p24 * 18 / 24;
 
       const formattedPrices: GoldPrice[] = [
-        { id: '24k', type: t('gold_24k'), price: p24, ...calculateChange(p24, p24), isFallback: isFallback },
-        { id: '22k', type: t('gold_22k'), price: p22, ...calculateChange(p22, p22), isFallback: isFallback },
-        { id: '21k', type: t('gold_21k'), price: p21, ...calculateChange(p21, p21), isFallback: isFallback },
-        { id: '18k', type: t('gold_18k'), price: p18, ...calculateChange(p18, p18), isFallback: isFallback },
+        { id: '24k', type: t('gold_24k'), price: p24, ...calculateChange(p24, p24) },
+        { id: '22k', type: t('gold_22k'), price: p22, ...calculateChange(p22, p22) },
+        { id: '21k', type: t('gold_21k'), price: p21, ...calculateChange(p21, p21) },
+        { id: '18k', type: t('gold_18k'), price: p18, ...calculateChange(p18, p18) },
       ];
 
       setPrices(formattedPrices);
@@ -1037,31 +1035,11 @@ function AppContent() {
       setLastUpdate(new Date());
     } catch (error) {
       console.error('Error fetching data:', error);
-      // Hardcoded fallback as last resort
-      const fallbackPriceOunce = 2150;
-      let fallbackPriceGram = fallbackPriceOunce / 31.1035;
-      
-      if (currency !== 'USD') {
-        let rate = 1;
-        if (currency === 'YER') {
-          rate = yemenRegion === 'SANAA' ? 530 : 1650;
-        } else {
-          const defaults: any = { 
-            'SAR': 3.75, 'AED': 3.67, 'EUR': 0.92, 'EGP': 47.0, 'TRY': 32.0,
-            'GBP': 0.79, 'KWD': 0.31, 'QAR': 3.64, 'BHD': 0.38, 'OMR': 0.38,
-            'JOD': 0.71, 'LYD': 4.8
-          };
-          rate = defaults[currency] || 1;
-        }
-        fallbackPriceGram = fallbackPriceGram * rate;
-      }
-
-      const p24 = fallbackPriceGram;
       setPrices([
-        { id: '24k', type: t('gold_24k'), price: p24, change: 0, changePercent: 0, isFallback: true },
-        { id: '22k', type: t('gold_22k'), price: p24 * (22 / 24), change: 0, changePercent: 0, isFallback: true },
-        { id: '21k', type: t('gold_21k'), price: p24 * (21 / 24), change: 0, changePercent: 0, isFallback: true },
-        { id: '18k', type: t('gold_18k'), price: p24 * (18 / 24), change: 0, changePercent: 0, isFallback: true }
+        { id: '24k', type: t('gold_24k'), price: 0, change: 0, changePercent: 0 },
+        { id: '22k', type: t('gold_22k'), price: 0, change: 0, changePercent: 0 },
+        { id: '21k', type: t('gold_21k'), price: 0, change: 0, changePercent: 0 },
+        { id: '18k', type: t('gold_18k'), price: 0, change: 0, changePercent: 0 },
       ]);
     } finally {
       setLoading(false);
@@ -1071,7 +1049,12 @@ function AppContent() {
   useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 420000); // 7 min (approx 8.5 requests/hour)
-    return () => clearInterval(interval);
+    const handlePriceUpdate = () => fetchData(true);
+    window.addEventListener('price-updated', handlePriceUpdate);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('price-updated', handlePriceUpdate);
+    };
   }, [currency, yemenRegion]);
 
   if (loading) {
@@ -1170,15 +1153,6 @@ function AppContent() {
       </header>
 
       <TickerBar prices={prices} currency={currency} />
-
-      {prices.some(p => p.isFallback) && (
-        <div className="bg-yellow-500/10 border-b border-yellow-500/20 py-2 px-4 text-center">
-          <p className="text-[10px] text-yellow-500 font-bold flex items-center justify-center gap-2">
-            <Info size={12} />
-            يواجه النظام حالياً صعوبة في الاتصال بمزود الأسعار العالمي. الأسعار المعروضة هي آخر أسعار مسجلة (تقديرية).
-          </p>
-        </div>
-      )}
 
       {currency === 'YER' && (
         <div className="max-w-7xl mx-auto w-full px-6 pt-6 animate-in fade-in slide-in-from-top-4 duration-700">

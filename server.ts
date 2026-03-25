@@ -30,7 +30,7 @@ let goldPriceCache = {
   isFallback: false
 };
 
-const CACHE_DURATION = 15 * 60 * 1000; // 15 minutes
+const CACHE_DURATION = 1 * 60 * 1000; // 1 minute
 
 async function startServer() {
   const app = express();
@@ -87,20 +87,31 @@ async function startServer() {
         return res.json(goldPriceCache);
       }
 
-      // 3. Fetch from Reliable Public APIs (No Keys Required)
+      // 3. Fetch from Google Search
       const sources = [
-        { name: 'Gold-API', url: 'https://api.gold-api.com/price/XAU' },
-        { name: 'CoinGecko (PAXG)', url: 'https://api.coingecko.com/api/v3/simple/price?ids=pax-gold&vs_currencies=usd' },
-        { name: 'Binance (PAXG)', url: 'https://api.binance.com/api/v3/ticker/price?symbol=PAXGUSDT' }
+        { 
+          name: 'Google Scraping (SAR)', 
+          url: 'https://www.google.com/search?q=gold+price+per+gram+sar',
+          headers: { "User-Agent": "Mozilla/5.0" },
+          parser: (text: string) => {
+            const match = text.match(/<span class="pclqee">([\d,.]+)<\/span>/);
+            return match ? Number(match[1].replace(/,/g, '')) : 0;
+          }
+        }
       ];
 
       for (const source of sources) {
         try {
           console.log(`Fetching from ${source.name}...`);
-          const response = await axios.get(source.url, { timeout: 5000 });
+          const response = await axios.get(source.url, { 
+            timeout: 5000,
+            headers: source.headers || {}
+          });
           
           let price = 0;
-          if (source.name === 'Gold-API') price = Number(response.data.price);
+          if (source.parser) {
+            price = source.parser(response.data);
+          } else if (source.name === 'Gold-API') price = Number(response.data.price);
           else if (source.name === 'CoinGecko (PAXG)') price = Number(response.data['pax-gold']?.usd);
           else if (source.name === 'Binance (PAXG)') price = Number(response.data.price);
 

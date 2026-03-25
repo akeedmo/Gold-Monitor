@@ -93,6 +93,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        console.log("onAuthStateChanged fired with user:", firebaseUser);
       if (firebaseUser) {
         // Check if user is admin in Firestore
         const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
@@ -110,6 +111,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
           auth.signOut();
         }
       } else {
+        console.log("User is null, setting user to null");
         setUser(null);
         setToken(null);
       }
@@ -117,7 +119,11 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     return () => unsubscribe();
   }, []);
 
-  const [passwordConfirmed, setPasswordConfirmed] = useState(false);
+  const [passwordConfirmed, setPasswordConfirmed] = useState(localStorage.getItem('password_confirmed') === 'true');
+
+  useEffect(() => {
+    localStorage.setItem('password_confirmed', passwordConfirmed.toString());
+  }, [passwordConfirmed]);
 
   const handleGoogleLogin = async () => {
     try {
@@ -1008,6 +1014,62 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                       className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-xs font-mono text-white focus:outline-none focus:border-primary"
                     />
                   </div>
+                </div>
+              </div>
+
+              <div className="bg-card p-8 rounded-2xl border border-gold/10 shadow-lg space-y-6">
+                <h3 className="text-lg font-bold flex items-center gap-2 text-white">
+                  <RefreshCw size={20} className="text-primary" />
+                  إدارة الأسعار المباشرة
+                </h3>
+                <div className="space-y-4">
+                  <div className="p-4 bg-white/5 rounded-xl border border-white/10 text-center">
+                    <p className="text-xs font-bold text-gray-500 mb-2 block">سعر الأونصة (USD):</p>
+                    <p className="text-3xl font-bold text-primary">
+                      {stats?.latestPrice?.price ? `$${stats.latestPrice.price.toLocaleString()}` : 'جاري التحميل...'}
+                    </p>
+                    <p className="text-[10px] text-gray-400 mt-2">
+                      آخر تحديث: {stats?.latestPrice?.timestamp ? new Date(stats.latestPrice.timestamp).toLocaleString(locale) : 'غير معروف'}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(exchangeRates).map(([currency, rate]) => (
+                      <div key={currency} className="p-2 bg-white/5 rounded-lg border border-white/5 text-center">
+                        <p className="text-[10px] text-gray-400">{currency}</p>
+                        <p className="text-sm font-bold text-white">{Number(rate).toLocaleString(locale, { minimumFractionDigits: 2 })}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {error && (
+                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-500">
+                      <AlertTriangle size={20} />
+                      <p className="text-sm font-bold">{error}</p>
+                    </div>
+                  )}
+
+                  <button 
+                    onClick={async () => {
+                      setSaveLoading(true);
+                      setError(''); // Clear previous errors
+                      try {
+                        const res = await axios.get('/api/gold-price?force=true');
+                        showSuccess(`تم تحديث الأسعار! السعر الحالي: $${res.data.price}`);
+                        fetchData(); // Refresh stats
+                        window.dispatchEvent(new CustomEvent('price-updated'));
+                      } catch (err) {
+                        setError('فشل تحديث الأسعار - يرجى المحاولة لاحقاً');
+                      } finally {
+                        setSaveLoading(false);
+                      }
+                    }}
+                    disabled={saveLoading}
+                    className="w-full py-3 bg-primary/10 text-primary border border-primary/20 rounded-xl font-bold hover:bg-primary/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    <RefreshCw className={saveLoading ? "animate-spin" : ""} size={18} />
+                    تحديث الأسعار الآن
+                  </button>
                 </div>
               </div>
 
