@@ -210,6 +210,8 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
         await handleSubscribe(null, result.user.email);
       }
     } catch (err: any) {
+      console.error("Google Sign-in error code:", err.code);
+      console.error("Google Sign-in error message:", err.message);
       if (err.code === 'auth/popup-closed-by-user') {
         console.log('User closed the login popup');
         return;

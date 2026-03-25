@@ -1376,42 +1376,44 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                   {apiKeys.pendingKeys && apiKeys.pendingKeys.length > 0 && (
                     <div className="bg-white/5 p-4 rounded-xl border border-white/10">
                       <p className="text-sm text-gray-400 mb-2">المفاتيح الاحتياطية ({apiKeys.pendingKeys.length}):</p>
-                      <ul className="space-y-2">
-                        {apiKeys.pendingKeys.map((item, idx) => (
-                          <li key={idx} className="flex items-center justify-between text-sm bg-black/30 px-3 py-2 rounded-lg">
-                            <div className="flex flex-col">
-                              <span className="text-xs text-gray-400">{item.provider}</span>
-                              <code className="text-gray-300 font-mono">{item.key}</code>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button 
-                                onClick={() => handleTestKey(item.key, item.provider)}
-                                disabled={testLoading}
-                                className="text-blue-400 hover:text-blue-300 text-xs font-bold disabled:opacity-50"
-                              >
-                                اختبار
-                              </button>
-                              <button 
-                                onClick={() => handleSetAsActive(idx)}
-                                className="text-green-400 hover:text-green-300 text-xs font-bold"
-                              >
-                                تفعيل
-                              </button>
-                              <button 
-                                onClick={() => {
-                                  setApiKeys(prev => ({
-                                    ...prev,
-                                    pendingKeys: prev.pendingKeys.filter((_, i) => i !== idx)
-                                  }));
-                                }}
-                                className="text-red-400 hover:text-red-300"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
+                      <div className="max-h-60 overflow-y-auto pr-2">
+                        <ul className="space-y-2">
+                          {apiKeys.pendingKeys.map((item, idx) => (
+                            <li key={idx} className="flex items-center justify-between text-sm bg-black/30 px-3 py-2 rounded-lg">
+                              <div className="flex flex-col">
+                                <span className="text-xs text-gray-400">{item.provider}</span>
+                                <code className="text-gray-300 font-mono">{item.key}</code>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button 
+                                  onClick={() => handleTestKey(item.key, item.provider)}
+                                  disabled={testLoading}
+                                  className="text-blue-400 hover:text-blue-300 text-xs font-bold disabled:opacity-50"
+                                >
+                                  اختبار
+                                </button>
+                                <button 
+                                  onClick={() => handleSetAsActive(idx)}
+                                  className="text-green-400 hover:text-green-300 text-xs font-bold"
+                                >
+                                  تفعيل
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    setApiKeys(prev => ({
+                                      ...prev,
+                                      pendingKeys: prev.pendingKeys.filter((_, i) => i !== idx)
+                                    }));
+                                  }}
+                                  className="text-red-400 hover:text-red-300"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     </div>
                   )}
 
@@ -1421,13 +1423,15 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                         <p className="text-sm text-gray-400">المفاتيح المنتهية ({apiKeys.expiredKeys.length}):</p>
                         <span className="text-xs font-bold text-red-500 bg-red-500/10 px-2 py-1 rounded-full">منتهي</span>
                       </div>
-                      <ul className="space-y-2">
-                        {apiKeys.expiredKeys.map((key, idx) => (
-                          <li key={idx} className="text-sm bg-black/30 px-3 py-2 rounded-lg">
-                            <code className="text-gray-500 font-mono line-through">{key}</code>
-                          </li>
-                        ))}
-                      </ul>
+                      <div className="max-h-60 overflow-y-auto pr-2">
+                        <ul className="space-y-2">
+                          {apiKeys.expiredKeys.map((key, idx) => (
+                            <li key={idx} className="text-sm bg-black/30 px-3 py-2 rounded-lg">
+                              <code className="text-gray-500 font-mono line-through">{key}</code>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     </div>
                   )}
 
