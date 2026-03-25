@@ -89,7 +89,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   const [successMessage, setSuccessMessage] = useState('');
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<any>(auth.currentUser);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -181,7 +181,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
 
   const showSuccess = (msg: string) => {
     setSuccessMessage(msg);
-    setTimeout(() => setSuccessMessage(''), 3000);
+    setTimeout(() => setSuccessMessage(''), 5000);
   };
 
   const handleChangePassword = async () => {
@@ -384,7 +384,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     }
   };
 
-  if (!user) {
+  if (!user && !auth.currentUser) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center p-6" dir={isRTL ? "rtl" : "ltr"}>
         <div className="bg-card p-8 rounded-2xl shadow-xl w-full max-w-md border border-gold/10">
@@ -409,6 +409,15 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
             {t('back_to_home')}
           </button>
         </div>
+      </div>
+    );
+  }
+
+  // Show loading only on initial load if user is authenticated but state not yet updated or stats not loaded
+  if ((!user && auth.currentUser) || (user && !stats && !error && !successMessage)) {
+    return (
+      <div className="min-h-screen bg-bg flex items-center justify-center">
+        <RefreshCw className="w-10 h-10 text-primary animate-spin" />
       </div>
     );
   }
@@ -1055,10 +1064,27 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                       setError(''); // Clear previous errors
                       try {
                         const res = await axios.get('/api/gold-price?force=true');
-                        showSuccess(`تم تحديث الأسعار! السعر الحالي: $${res.data.price}`);
-                        fetchData(); // Refresh stats
+                        const newPrice = res.data.price;
+                        const newTimestamp = res.data.timestamp || Date.now();
+                        
+                        // Update local stats immediately to show the new price without a full fetchData
+                        setStats(prev => prev ? {
+                          ...prev,
+                          latestPrice: { 
+                            price: newPrice, 
+                            timestamp: new Date(newTimestamp).toISOString() 
+                          }
+                        } : null);
+                        
+                        showSuccess(`تم تحديث الأسعار بنجاح! السعر الحالي: $${newPrice.toLocaleString()}`);
+                        
+                        // Notify the rest of the app
                         window.dispatchEvent(new CustomEvent('price-updated'));
+                        
+                        // Optionally refresh other stats in the background
+                        fetchData();
                       } catch (err) {
+                        console.error("Manual price update failed:", err);
                         setError('فشل تحديث الأسعار - يرجى المحاولة لاحقاً');
                       } finally {
                         setSaveLoading(false);

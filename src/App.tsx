@@ -836,7 +836,8 @@ function AppContent() {
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({ USD: 1 });
   const [lastUpdate, setLastUpdate] = useState(new Date());
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isFirstLoad, setIsFirstLoad] = useState(true);
+  const navigate = useNavigate();
   const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('admin_token'));
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const location = useLocation();
@@ -897,7 +898,7 @@ function AppContent() {
 
   useEffect(() => {
     setIsLoggedIn(!!localStorage.getItem('admin_token'));
-  }, [isAdmin]);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('selectedCurrency', currency);
@@ -951,8 +952,7 @@ function AppContent() {
   };
 
   const fetchData = async (force = false) => {
-    const isInitial = prices[0].price === 0;
-    if (isInitial) setLoading(true);
+    if (isFirstLoad) setLoading(true);
     try {
       // Fetch gold price from our server-side proxy (which handles caching and rate limits)
       // The server returns the price of 1 ounce of gold in USD.
@@ -1033,6 +1033,7 @@ function AppContent() {
       setChartData([]);
       setNews([]);
       setLastUpdate(new Date());
+      setIsFirstLoad(false);
     } catch (error) {
       console.error('Error fetching data:', error);
       setPrices([
@@ -1057,19 +1058,11 @@ function AppContent() {
     };
   }, [currency, yemenRegion]);
 
-  if (loading) {
+  if (loading && location.pathname !== '/admin') {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center">
         <RefreshCw className="w-10 h-10 text-primary animate-spin" />
       </div>
-    );
-  }
-
-  if (isAdmin) {
-    return (
-      <Suspense fallback={<div className="min-h-screen bg-bg flex items-center justify-center"><RefreshCw className="w-10 h-10 text-primary animate-spin" /></div>}>
-        <AdminDashboard onBack={() => setIsAdmin(false)} />
-      </Suspense>
     );
   }
 
@@ -1085,7 +1078,7 @@ function AppContent() {
               <div className="flex items-center gap-3">
                 <h1 className="text-xl font-bold gold-text-gradient whitespace-nowrap">{t('site_title')}</h1>
                 <button 
-                  onClick={() => setIsAdmin(true)} 
+                  onClick={() => navigate('/admin')} 
                   className="hidden sm:flex p-1.5 bg-white/5 rounded-lg border border-white/10 text-gray-400 hover:text-primary transition-all"
                   title={t('admin_login')}
                 >
@@ -1141,7 +1134,7 @@ function AppContent() {
                 <span>{t('share_app') || 'مشاركة الموقع'}</span>
               </button>
               <button 
-                onClick={() => { setIsAdmin(true); setIsMenuOpen(false); }} 
+                onClick={() => { navigate('/admin'); setIsMenuOpen(false); }} 
                 className="flex items-center gap-2 text-primary pt-4 border-t border-white/5"
               >
                 <Settings size={18} />
@@ -1193,7 +1186,7 @@ function AppContent() {
               </div>
               <span className="text-sm font-bold">{t('logged_in_as_admin')}</span>
             </div>
-            <button onClick={() => setIsAdmin(true)} className="px-4 py-2 bg-primary text-black rounded-lg text-xs font-bold hover:bg-primary/80 transition-all">
+            <button onClick={() => navigate('/admin')} className="px-4 py-2 bg-primary text-black rounded-lg text-xs font-bold hover:bg-primary/80 transition-all">
               {t('open_dashboard')}
             </button>
           </div>
@@ -1204,7 +1197,7 @@ function AppContent() {
           <Route path="/news" element={<NewsPage news={news} />} />
           <Route path="/tips" element={<TipsPage />} />
           <Route path="/about" element={<AboutPage />} />
-          <Route path="/admin" element={<Suspense fallback={<div className="min-h-screen bg-bg flex items-center justify-center"><RefreshCw className="w-10 h-10 text-primary animate-spin" /></div>}><AdminDashboard onBack={() => window.location.href = '/'} /></Suspense>} />
+          <Route path="/admin" element={<Suspense fallback={<div className="min-h-screen bg-bg flex items-center justify-center"><RefreshCw className="w-10 h-10 text-primary animate-spin" /></div>}><AdminDashboard onBack={() => navigate('/')} /></Suspense>} />
         </Routes>
       </main>
 

@@ -87,16 +87,24 @@ async function startServer() {
         return res.json(goldPriceCache);
       }
 
-      // 3. Fetch from Google Search
+      // 3. Fetch from multiple sources for reliability
       const sources = [
         { 
-          name: 'Google Scraping (SAR)', 
-          url: 'https://www.google.com/search?q=gold+price+per+gram+sar',
-          headers: { "User-Agent": "Mozilla/5.0" },
+          name: 'Google Scraping (USD/oz)', 
+          url: 'https://www.google.com/search?q=gold+price+per+ounce+usd',
+          headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
           parser: (text: string) => {
-            const match = text.match(/<span class="pclqee">([\d,.]+)<\/span>/);
+            // Look for the price in the Google search result
+            const match = text.match(/<span class="pclqee">([\d,.]+)<\/span>/) || 
+                          text.match(/data-precision="2">([\d,.]+)<\/span>/) ||
+                          text.match(/<span>(\d{1,3}(?:,\d{3})*(?:\.\d+)?)<\/span>\s*<span[^>]*>USD<\/span>/);
             return match ? Number(match[1].replace(/,/g, '')) : 0;
           }
+        },
+        {
+          name: 'Gold-API (Alternative)',
+          url: 'https://api.gold-api.com/api/gold',
+          parser: (data: any) => Number(data.price)
         }
       ];
 
