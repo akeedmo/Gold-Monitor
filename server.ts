@@ -70,258 +70,15 @@ async function startServer() {
     try {
       if (!db) throw new Error("Firebase not initialized on server");
 
-      // 1. Get API keys from Firestore
-      const keysDoc = await getDoc(doc(db, 'settings', 'apiKeys'));
-      const data = keysDoc.exists() ? keysDoc.data() : { manualPriceMode: false, manualPrice: 0, activeKey: null, pendingKeys: [] };
+      // 1. Get Settings from Firestore
+      const settingsDoc = await getDoc(doc(db, 'settings', 'apiKeys'));
+      const settingsData = settingsDoc.exists() ? settingsDoc.data() : { manualPriceMode: false, manualPrice: 0 };
       
-      const manualPriceMode = data.manualPriceMode || false;
-      const manualPrice = Number(data.manualPrice) || 0;
+      const manualPriceMode = settingsData.manualPriceMode || false;
+      const manualPrice = Number(settingsData.manualPrice) || 0;
 
       // 2. Handle Manual Mode
       if (manualPriceMode && Number.isFinite(manualPrice) && manualPrice > 0) {
-        goldPriceCache = {
-          price: manualPrice,
-          timestamp: now,
-          isFallback: true // Mark as manual/fallback
-        };
-        return res.json(goldPriceCache);
-      }
-
-      // 3. Get Active Key
-      let apiKey = process.env.GOLD_API_KEY || "";
-      let apiProvider = process.env.GOLD_API_PROVIDER || "GoldAPI";
-      
-      if (data.activeKey) {
-        if (typeof data.activeKey === 'object' && data.activeKey.key) {
-          apiKey = data.activeKey.key;
-          const rawProvider = data.activeKey.provider || "GoldAPI";
-          apiProvider = rawProvider.toUpperCase().includes('METAL') ? 'MetalPrice' : 
-                        rawProvider.toUpperCase().includes('NINJA') ? 'APINinjas' :
-                        rawProvider.toUpperCase().includes('PRICE') ? 'GoldPriceAPI' : 'GoldAPI';
-        } else if (typeof data.activeKey === 'string') {
-          apiKey = data.activeKey;
-        }
-      }
-
-      // Helper function to fetch from a specific key/provider
-      const fetchFromProvider = async (key: string, provider: string) => {
-        const maskedKey = key ? `${key.substring(0, 4)}...${key.substring(key.length - 4)}` : "null";
-        console.log(`Attempting fetch from ${provider} with key ${maskedKey}`);
-        
-        if (provider === 'MetalPrice') {
-          const response = await axios.get(`https://api.metalpriceapi.com/v1/latest?api_key=${key}&base=USD&currencies=XAU`, { timeout: 10000 });
-          if (response.data.success === false) {
-            throw new Error(`MetalPrice Error: ${response.data.error?.info || response.data.error?.message || 'Unknown error'}`);
-          }
-          const xauRate = Number(response.data.rates?.XAU);
-          return xauRate ? (1 / xauRate) : 0;
-        } else if (provider === 'GoldPriceAPI') {
-          const response = await axios.get(`https://api.goldpriceapi.com/v1/latest?api_key=${key}&base=USD&currencies=XAU`, { timeout: 10000 });
-          if (response.data.success === false) {
-            throw new Error(`GoldPriceAPI Error: ${response.data.error?.message || 'Unknown error'}`);
-          }
-          return Number(response.data.price) || 0;
-        } else if (provider === 'APINinjas') {
-          const response = await axios.get(`https://api.api-ninjas.com/v1/goldprice`, { 
-            headers: { 'X-Api-Key': key },
-            timeout: 10000 
-          });
-          return Number(response.data.price) || 0;
-        } else {
-          // GoldAPI.io
-          try {
-            // Use www.goldapi.io as api.goldapi.io might have DNS issues in this environment
-            const response = await axios.get('https://www.goldapi.io/api/XAU/USD', {
-              headers: { 
-                'x-access-token': key,
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'User-Agent': 'GoldPriceApp/1.0'
-              },
-              timeout: 10000
-            });
-            
-            if (response.data && response.data.error) {
-              throw new Error(`GoldAPI Error: ${response.data.error}`);
-            }
-            
-            return Number(response.data.price) || 0;
-          } catch (err: any) {
-            if (err.response?.data?.error) {
-              throw new Error(`GoldAPI Error: ${err.response.data.error}`);
-            }
-            throw err;
-          }
-        }
-      };
-
-      // 4. Fetch from API
-      let price = 0;
-      let lastErrorMessage = "";
-      
-      // --- NEW: Primary Free API (Original Method) ---
-      try {
-        console.log("Attempting to fetch real price from primary free API (gold-api.com)...");
-        const freeApiRes = await axios.get('https://api.gold-api.com/price/XAU', { timeout: 8000 });
-        const freePrice = Number(freeApiRes.data.price);
-        if (freePrice > 0) {
-          console.log(`Primary Free API success: ${freePrice}`);
-          goldPriceCache = { price: freePrice, timestamp: now, isFallback: false };
-          
-          // Update stats and clear error log on success
-          try {
-            await setDoc(doc(db, 'settings', 'stats'), {
-              latestPrice: { price: freePrice, timestamp: new Date(now).toISOString() }
-            }, { merge: true });
-            await setDoc(doc(db, 'settings', 'apiKeys'), { 
-              lastError: null, lastSuccess: new Date(now).toISOString()
-            }, { merge: true });
-          } catch (dbErr) { /* ignore */ }
-          
-          return res.json(goldPriceCache);
-        }
-      } catch (freeErr: any) {
-        console.warn("Primary Free API failed:", freeErr.message);
-      }
-
-      const keysToTry = [];
-      
-      // Add active key first
-      if (apiKey) {
-        keysToTry.push({ key: apiKey, provider: apiProvider, isPrimary: true });
-      }
-      
-      // Add pending keys
-      const pending = data.pendingKeys || [];
-      pending.forEach((p: any) => {
-        let pProv = "GoldAPI";
-        const rawP = p.provider?.toUpperCase() || "";
-        if (rawP.includes('METAL')) pProv = 'MetalPrice';
-        else if (rawP.includes('NINJA')) pProv = 'APINinjas';
-        else if (rawP.includes('PRICE')) pProv = 'GoldPriceAPI';
-        keysToTry.push({ key: p.key, provider: pProv, isPrimary: false });
-      });
-
-      for (const item of keysToTry) {
-        try {
-          // Small delay between retries to avoid rate limiting
-          if (keysToTry.indexOf(item) > 0) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-          
-          const cleanKey = item.key.trim();
-          price = await fetchFromProvider(cleanKey, item.provider);
-          if (price > 0) {
-            console.log(`Successfully fetched price (${price}) using ${item.provider}`);
-            goldPriceCache = { price, timestamp: now, isFallback: false };
-            
-            // Update stats and clear error log on success
-            try {
-              await setDoc(doc(db, 'settings', 'stats'), {
-                latestPrice: {
-                  price: price,
-                  timestamp: new Date(now).toISOString()
-                }
-              }, { merge: true });
-              
-              await setDoc(doc(db, 'settings', 'apiKeys'), { 
-                lastError: null,
-                lastSuccess: new Date(now).toISOString()
-              }, { merge: true });
-            } catch (dbErr) {
-              console.warn("Failed to update Firestore on success:", dbErr);
-            }
-            
-            return res.json(goldPriceCache);
-          }
-        } catch (apiErr: any) {
-          const status = apiErr.response?.status;
-          const errorDetail = apiErr.response?.data?.error?.info || apiErr.response?.data?.message || apiErr.message;
-          lastErrorMessage = `Fetch failed for ${item.provider} (Status: ${status || 'N/A'}): ${errorDetail}`;
-          console.error(lastErrorMessage);
-          
-          // If 403, 401, or "Invalid API Key" error, try cross-provider fallback (maybe user picked wrong provider)
-          const isInvalidKey = status === 403 || status === 401 || 
-                              (errorDetail && (errorDetail.includes('Invalid API Key') || errorDetail.includes('Invalid key')));
-          
-          if (isInvalidKey) {
-            const providersToTry = ['GoldAPI', 'MetalPrice', 'GoldPriceAPI', 'APINinjas'].filter(p => p !== item.provider);
-            for (const otherProvider of providersToTry) {
-              try {
-                console.log(`Trying cross-provider fallback: ${otherProvider}...`);
-                const altPrice = await fetchFromProvider(item.key.trim(), otherProvider);
-                if (altPrice > 0) {
-                  console.log(`Cross-provider fallback success! Price: ${altPrice} using ${otherProvider}`);
-                  goldPriceCache = { price: altPrice, timestamp: now, isFallback: false };
-                  await setDoc(doc(db, 'settings', 'apiKeys'), { 
-                    lastError: null,
-                    lastSuccess: new Date(now).toISOString()
-                  }, { merge: true });
-                  return res.json(goldPriceCache);
-                }
-              } catch (crossErr) {
-                // Ignore cross-provider failures
-              }
-            }
-          }
-        }
-      }
-
-      // Log the last error to Firestore so admin can see it
-      if (lastErrorMessage) {
-        await setDoc(doc(db, 'settings', 'apiKeys'), { 
-          lastError: {
-            message: lastErrorMessage,
-            timestamp: new Date().toISOString()
-          }
-        }, { merge: true });
-      }
-
-      // 5. Final Fallback (if all keys fail)
-      
-      // --- NEW: Real-Price Fallback (PAXG) ---
-      // If all keys fail, try to get real market price of PAX Gold (1:1 with Gold)
-      try {
-        console.log("Attempting to fetch real price from PAXG (CoinGecko)...");
-        const paxgRes = await axios.get('https://api.coingecko.com/api/v3/simple/price?ids=pax-gold&vs_currencies=usd', { timeout: 8000 });
-        const paxgPrice = Number(paxgRes.data['pax-gold']?.usd);
-        if (paxgPrice > 0) {
-          console.log(`PAXG Fallback success: ${paxgPrice}`);
-          goldPriceCache = { price: paxgPrice, timestamp: now, isFallback: true };
-          
-          // Update lastSuccess and clear error if fallback is successful
-          try {
-            await setDoc(doc(db, 'settings', 'apiKeys'), { 
-              lastError: null,
-              lastSuccess: new Date(now).toISOString()
-            }, { merge: true });
-          } catch (e) { /* ignore */ }
-          
-          return res.json(goldPriceCache);
-        }
-      } catch (paxgErr: any) {
-        console.warn("PAXG fallback (CoinGecko) failed:", paxgErr.message);
-        
-        // Try Binance as another fallback for PAXG
-        try {
-          console.log("Attempting to fetch real price from PAXG (Binance)...");
-          const binanceRes = await axios.get('https://api.binance.com/api/v3/ticker/price?symbol=PAXGUSDT', { timeout: 5000 });
-          const binancePrice = Number(binanceRes.data.price);
-          if (binancePrice > 0) {
-            console.log(`PAXG Fallback (Binance) success: ${binancePrice}`);
-            goldPriceCache = { price: binancePrice, timestamp: now, isFallback: true };
-            return res.json(goldPriceCache);
-          }
-        } catch (binanceErr: any) {
-          console.warn("PAXG fallback (Binance) failed:", binanceErr.message);
-        }
-      }
-
-      console.error(`All API attempts failed. Last error: ${lastErrorMessage}`);
-
-      // If we have a manual price, use it as a more reliable fallback than stale cache
-      if (Number.isFinite(manualPrice) && manualPrice > 0) {
-        console.log("Using manual price as last-resort fallback.");
         goldPriceCache = {
           price: manualPrice,
           timestamp: now,
@@ -330,28 +87,58 @@ async function startServer() {
         return res.json(goldPriceCache);
       }
 
+      // 3. Fetch from Reliable Public APIs (No Keys Required)
+      const sources = [
+        { name: 'Gold-API', url: 'https://api.gold-api.com/price/XAU' },
+        { name: 'CoinGecko (PAXG)', url: 'https://api.coingecko.com/api/v3/simple/price?ids=pax-gold&vs_currencies=usd' },
+        { name: 'Binance (PAXG)', url: 'https://api.binance.com/api/v3/ticker/price?symbol=PAXGUSDT' }
+      ];
+
+      for (const source of sources) {
+        try {
+          console.log(`Fetching from ${source.name}...`);
+          const response = await axios.get(source.url, { timeout: 5000 });
+          
+          let price = 0;
+          if (source.name === 'Gold-API') price = Number(response.data.price);
+          else if (source.name === 'CoinGecko (PAXG)') price = Number(response.data['pax-gold']?.usd);
+          else if (source.name === 'Binance (PAXG)') price = Number(response.data.price);
+
+          if (price > 0) {
+            console.log(`Successfully fetched price (${price}) using ${source.name}`);
+            goldPriceCache = { price, timestamp: now, isFallback: false };
+            
+            // Update stats
+            try {
+              await setDoc(doc(db, 'settings', 'stats'), {
+                latestPrice: { price, timestamp: new Date(now).toISOString() }
+              }, { merge: true });
+            } catch (dbErr) { console.warn("Failed to update stats:", dbErr); }
+            
+            return res.json(goldPriceCache);
+          }
+        } catch (err: any) {
+          console.warn(`${source.name} failed:`, err.message);
+        }
+      }
+
+      // 4. Final Fallback (Cache or Default)
+      console.error("All public API attempts failed.");
+      
       if (goldPriceCache.price > 0) {
         console.log("Using stale cache as last-resort fallback.");
         goldPriceCache.isFallback = true;
         return res.json(goldPriceCache);
       }
 
-      // If no cache at all, try manual price or Firestore stats
-      const statsDoc = await getDoc(doc(db, 'settings', 'stats'));
-      const lastPrice = (Number.isFinite(manualPrice) && manualPrice > 0) ? manualPrice : (statsDoc.exists() ? Number(statsDoc.data().latestPrice?.price) : 2150);
-      
-      goldPriceCache = {
-        price: Number.isFinite(lastPrice) && lastPrice > 0 ? lastPrice : 2150,
-        timestamp: now,
-        isFallback: true
-      };
+      // Default
+      goldPriceCache = { price: 2500, timestamp: now, isFallback: true };
       res.json(goldPriceCache);
 
     } catch (error: any) {
       console.error("Gold price fetch error:", error.message);
-      // Return whatever we have in cache or a default
       res.json({
-        price: (Number.isFinite(goldPriceCache.price) && goldPriceCache.price > 0) ? goldPriceCache.price : 2150,
+        price: (Number.isFinite(goldPriceCache.price) && goldPriceCache.price > 0) ? goldPriceCache.price : 2500,
         timestamp: now,
         isFallback: true
       });
