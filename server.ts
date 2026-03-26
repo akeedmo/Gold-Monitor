@@ -108,6 +108,22 @@ async function fetchGoldPriceFromAPI(updateType: 'manual' | 'auto' = 'manual') {
     throw new Error("METALPRICE_API_KEY is not configured in Firestore or environment variables");
   }
 
+  // Refresh exchange rates from Firestore before calculation
+  const database = getDb();
+  if (database) {
+    try {
+      const ratesDoc = await getDoc(doc(database, 'settings', 'exchangeRates'));
+      if (ratesDoc.exists()) {
+        const ratesData = ratesDoc.data() as any;
+        customExchangeRates.YER_SANAA = Number(ratesData.YER_SANAA) || 530;
+        customExchangeRates.YER_ADEN = Number(ratesData.YER_ADEN) || 1650;
+        console.log("Exchange rates refreshed from Firestore:", customExchangeRates);
+      }
+    } catch (e) {
+      console.warn("Failed to refresh exchange rates from Firestore, using current values.");
+    }
+  }
+
   try {
     // 1. Fetch from MetalpriceAPI
     const response = await axios.get(`https://api.metalpriceapi.com/v1/latest?api_key=${activeKey}&base=USD&currencies=XAU`);
@@ -263,8 +279,11 @@ async function startServer() {
   // Manual update endpoint
   app.post("/api/admin/update-price", async (req, res) => {
     try {
-      if (!METALPRICE_API_KEY) {
-        return res.status(400).json({ success: false, error: "METALPRICE_API_KEY is missing in environment variables. Please add it in the settings." });
+      const firestoreKey = await getApiKeyFromFirestore();
+      const activeKey = firestoreKey || process.env.METALPRICE_API_KEY;
+      
+      if (!activeKey) {
+        return res.status(400).json({ success: false, error: "METALPRICE_API_KEY is missing. Please add it in the settings." });
       }
       const data = await fetchGoldPriceFromAPI('manual');
       res.json({ success: true, data });

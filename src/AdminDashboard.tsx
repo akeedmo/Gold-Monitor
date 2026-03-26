@@ -126,7 +126,16 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     return () => unsubscribe();
   }, []);
 
-  const [passwordConfirmed, setPasswordConfirmed] = useState(false);
+  const [passwordConfirmed, setPasswordConfirmed] = useState(localStorage.getItem('password_confirmed') === 'true');
+  const [rememberMe, setRememberMe] = useState(true);
+
+  useEffect(() => {
+    if (rememberMe) {
+      localStorage.setItem('password_confirmed', passwordConfirmed.toString());
+    } else {
+      localStorage.removeItem('password_confirmed');
+    }
+  }, [passwordConfirmed, rememberMe]);
 
   const handleGoogleLogin = async () => {
     try {
@@ -472,6 +481,16 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary"
               autoFocus
             />
+            <div className="flex items-center gap-2 px-1">
+              <input 
+                type="checkbox" 
+                id="rememberMe" 
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="w-4 h-4 accent-primary rounded cursor-pointer"
+              />
+              <label htmlFor="rememberMe" className="text-xs text-gray-400 cursor-pointer">تذكرني على هذا الجهاز</label>
+            </div>
             {error && <p className="text-red-500 text-xs">{error}</p>}
             <button type="submit" disabled={loading} className="w-full py-4 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all">
               {loading ? 'جاري التحقق...' : 'تأكيد'}
