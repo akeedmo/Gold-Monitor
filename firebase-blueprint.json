@@ -83,9 +83,39 @@
         "status": { "type": "string", "enum": ["active", "unsubscribed"] }
       },
       "required": ["email", "subscribed_at", "status"]
+    },
+    "PriceHistory": {
+      "title": "PriceHistory",
+      "description": "Historical gold prices with update metadata",
+      "type": "object",
+      "properties": {
+        "price_usd": { "type": "number" },
+        "price_sanaa": { "type": "number" },
+        "price_aden": { "type": "number" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "update_type": { "type": "string", "enum": ["manual", "auto"] },
+        "remaining_api": { "type": "integer" },
+        "change_value": { "type": "number" },
+        "change_type": { "type": "string", "enum": ["up", "down", "stable"] }
+      },
+      "required": ["price_usd", "price_sanaa", "price_aden", "updated_at", "update_type", "remaining_api", "change_value", "change_type"]
+    },
+    "ApiKeySetting": {
+      "title": "ApiKeySetting",
+      "description": "MetalpriceAPI key configuration",
+      "type": "object",
+      "properties": {
+        "METALPRICE_API_KEY": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["METALPRICE_API_KEY"]
     }
   },
   "firestore": {
+    "/price_history": {
+      "schema": "PriceHistory",
+      "description": "Detailed gold price update history"
+    },
     "/prices": {
       "schema": "Price",
       "description": "Historical gold prices"
@@ -105,6 +135,10 @@
     "/settings": {
       "schema": "Setting",
       "description": "App configuration"
+    },
+    "/settings/api_keys": {
+      "schema": "ApiKeySetting",
+      "description": "API key storage"
     },
     "/notifications": {
       "schema": "Notification",

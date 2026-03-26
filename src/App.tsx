@@ -25,7 +25,7 @@ import {
   Share2
 } from 'lucide-react';
 import axios from 'axios';
-import { auth, db } from './firebase';
+import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, addDoc, increment } from 'firebase/firestore';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
@@ -72,7 +72,7 @@ const TickerBar = ({ prices, currency }: { prices: GoldPrice[], currency: string
               {item.type} - {item.price.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency}
             </span>
             <span className={`text-xs ${item.change >= 0 ? "text-up" : "text-down"}`}>
-              {item.change >= 0 ? '▲' : '▼'} {Math.abs(item.changePercent).toFixed(2)}%
+              {item.change >= 0 ? '▲' : '▼'} {(Math.abs(item.changePercent) || 0).toFixed(2)}%
             </span>
           </div>
         ))}
@@ -168,11 +168,13 @@ const CurrencyLanguageSelector = ({ currency, setCurrency, language, setLanguage
   );
 };
 
-const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate, setCurrency, setLanguage, calcAmount, setCalcAmount, calcType, setCalcType, handleShare }: any) => {
+const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate, setCurrency, setLanguage, calcAmount, setCalcAmount, calcType, setCalcType, handleShare, goldData }: any) => {
   const { t, language } = useTranslation();
   const locale = language === 'ar' ? 'ar-SA' : language === 'tr' ? 'tr-TR' : 'en-US';
   const [email, setEmail] = useState('');
   const [subLoading, setSubLoading] = useState(false);
+
+  const displayLastUpdate = goldData?.timestamp ? new Date(goldData.timestamp) : lastUpdate;
 
   const handleSubscribe = async (e?: any, googleEmail?: string) => {
     const emailToUse = googleEmail || email;
@@ -241,10 +243,10 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
         <div className="flex items-center gap-4">
           <CurrencyLanguageSelector currency={currency} setCurrency={setCurrency} language={language} setLanguage={setLanguage} />
         </div>
-        <div className="flex flex-col md:items-end gap-2">
+          <div className="flex flex-col md:items-end gap-2">
           <h2 className="text-3xl font-bold gold-text-gradient">{t('market_overview')}</h2>
           <div className="flex items-center gap-4">
-            <p className="text-sm text-gray-500">{t('last_update')} {lastUpdate.toLocaleTimeString(locale)}</p>
+            <p className="text-sm text-gray-500">{t('last_update')} {displayLastUpdate.toLocaleTimeString(locale)}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 text-xs font-bold text-up bg-up/10 px-3 py-1.5 rounded-full">
@@ -262,7 +264,7 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
                 <Coins size={20} />
               </div>
               <div className={`text-xs font-bold px-2 py-1 rounded-full ${item.change >= 0 ? 'bg-up/10 text-up' : 'bg-down/10 text-down'}`}>
-                {item.change >= 0 ? '+' : ''}{item.changePercent.toFixed(2)}%
+                {item.change >= 0 ? '+' : ''}{(item.changePercent || 0).toFixed(2)}%
               </div>
             </div>
             <h3 className="text-gray-500 text-xs font-bold mb-1">{item.type}</h3>
@@ -835,12 +837,32 @@ function AppContent() {
   const [yemenRegion, setYemenRegion] = useState(localStorage.getItem('yemenRegion') || 'ADEN');
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({ USD: 1 });
   const [lastUpdate, setLastUpdate] = useState(new Date());
+  const [goldData, setGoldData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isFirstLoad, setIsFirstLoad] = useState(true);
   const navigate = useNavigate();
-  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('admin_token'));
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const location = useLocation();
+
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      if (user) {
+        try {
+          // Check if user is admin in Firestore
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          const isAdmin = userDoc.exists() && userDoc.data().role === 'admin';
+          const isDefaultAdmin = user.email === "qydalrfyd@gmail.com";
+          setIsLoggedIn(isAdmin || isDefaultAdmin);
+        } catch (e) {
+          handleFirestoreError(e, OperationType.GET, `users/${user.uid}`);
+        }
+      } else {
+        setIsLoggedIn(false);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     const trackVisitor = async () => {
@@ -870,23 +892,31 @@ function AppContent() {
           }
         }
 
-        await addDoc(collection(db, 'visitors'), {
-          ...ipData,
-          timestamp: new Date().toISOString(),
-          userAgent: navigator.userAgent
-        });
+        try {
+          await addDoc(collection(db, 'visitors'), {
+            ...ipData,
+            timestamp: new Date().toISOString(),
+            userAgent: navigator.userAgent
+          });
+        } catch (e) {
+          handleFirestoreError(e, OperationType.CREATE, 'visitors');
+        }
         
         const statsRef = doc(db, 'settings', 'stats');
-        const statsDoc = await getDoc(statsRef);
-        if (!statsDoc.exists()) {
-          await setDoc(statsRef, { total: 1, today: 1, week: 1, month: 1, history: [], totalNews: 0 });
-        } else {
-          await setDoc(statsRef, { 
-            total: increment(1), 
-            today: increment(1),
-            week: increment(1),
-            month: increment(1)
-          }, { merge: true });
+        try {
+          const statsDoc = await getDoc(statsRef);
+          if (!statsDoc.exists()) {
+            await setDoc(statsRef, { total: 1, today: 1, week: 1, month: 1, history: [], totalNews: 0 });
+          } else {
+            await setDoc(statsRef, { 
+              total: increment(1), 
+              today: increment(1),
+              week: increment(1),
+              month: increment(1)
+            }, { merge: true });
+          }
+        } catch (e) {
+          handleFirestoreError(e, OperationType.WRITE, 'settings/stats');
         }
       } catch (e) {
         // Silently fail visitor tracking to avoid annoying the user
@@ -894,10 +924,6 @@ function AppContent() {
       }
     };
     trackVisitor();
-  }, []);
-
-  useEffect(() => {
-    setIsLoggedIn(!!localStorage.getItem('admin_token'));
   }, []);
 
   useEffect(() => {
@@ -959,6 +985,7 @@ function AppContent() {
       const timestamp = new Date().getTime();
       const goldResponse = await axios.get(`/api/gold-price?t=${timestamp}${force ? '&force=true' : ''}`, { timeout: 15000 });
       const { price } = goldResponse.data;
+      setGoldData(goldResponse.data);
       const goldPriceOunce = Number(price) || 2150;
 
       // Fetch exchange rates from Firestore
@@ -1011,11 +1038,13 @@ function AppContent() {
         pricePerGram = pricePerGram * rate;
       }
 
-      const calculateChange = (current: number, prev: number) => {
-        const change = (current || 0) - (prev || 0);
-        const changePercent = (prev && prev !== 0) ? (change / prev) * 100 : 0;
-        return { change: change, changePercent };
-      };
+      const rawChangeVal = goldResponse.data.change_value || 0;
+      const changeType = goldResponse.data.change_type || 'stable';
+      const changeVal = changeType === 'down' ? -rawChangeVal : rawChangeVal;
+      
+      const changePercent = (goldResponse.data.price && (goldResponse.data.price - changeVal) !== 0) 
+        ? (changeVal / (goldResponse.data.price - changeVal)) * 100 
+        : 0;
 
       const p24 = pricePerGram;
       const p22 = p24 * 22 / 24;
@@ -1023,10 +1052,10 @@ function AppContent() {
       const p18 = p24 * 18 / 24;
 
       const formattedPrices: GoldPrice[] = [
-        { id: '24k', type: t('gold_24k'), price: p24, ...calculateChange(p24, p24) },
-        { id: '22k', type: t('gold_22k'), price: p22, ...calculateChange(p22, p22) },
-        { id: '21k', type: t('gold_21k'), price: p21, ...calculateChange(p21, p21) },
-        { id: '18k', type: t('gold_18k'), price: p18, ...calculateChange(p18, p18) },
+        { id: '24k', type: t('gold_24k'), price: p24, change: changeVal, changePercent: changePercent },
+        { id: '22k', type: t('gold_22k'), price: p22, change: changeVal * (22/24), changePercent: changePercent },
+        { id: '21k', type: t('gold_21k'), price: p21, change: changeVal * (21/24), changePercent: changePercent },
+        { id: '18k', type: t('gold_18k'), price: p18, change: changeVal * (18/24), changePercent: changePercent },
       ];
 
       setPrices(formattedPrices);
@@ -1192,7 +1221,7 @@ function AppContent() {
           </div>
         )}
         <Routes>
-          <Route path="/" element={<HomePage prices={prices} chartData={chartData} news={news} currency={currency} exchangeRates={exchangeRates} lastUpdate={lastUpdate} setCurrency={setCurrency} setLanguage={setLanguage} calcAmount={calcAmount} setCalcAmount={setCalcAmount} calcType={calcType} setCalcType={setCalcType} handleShare={handleShare} />} />
+          <Route path="/" element={<HomePage prices={prices} chartData={chartData} news={news} currency={currency} exchangeRates={exchangeRates} lastUpdate={lastUpdate} setCurrency={setCurrency} setLanguage={setLanguage} calcAmount={calcAmount} setCalcAmount={setCalcAmount} calcType={calcType} setCalcType={setCalcType} handleShare={handleShare} goldData={goldData} />} />
           <Route path="/charts" element={<ChartsPage chartData={chartData} currency={currency} setCurrency={setCurrency} language={language} setLanguage={setLanguage} />} />
           <Route path="/news" element={<NewsPage news={news} />} />
           <Route path="/tips" element={<TipsPage />} />

@@ -4,6 +4,8 @@ import {
   Users, 
   Calendar, 
   TrendingUp, 
+  TrendingDown,
+  History,
   ArrowLeft, 
   ArrowRight,
   Lock,
@@ -43,7 +45,7 @@ import {
 } from 'recharts';
 import axios from 'axios';
 import { useTranslation } from './i18n';
-import { auth, db } from './firebase';
+import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 
@@ -79,10 +81,14 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     manualPriceMode: false,
     manualPrice: 2150
   });
+  const [apiKeyInfo, setApiKeyInfo] = useState<any>({ hasKey: false, isFromFirestore: false, maskedKey: null });
+  const [newApiKey, setNewApiKey] = useState('');
+  const [apiKeyLoading, setApiKeyLoading] = useState(false);
   const [visitors, setVisitors] = useState<any[]>([]);
   const [news, setNews] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('overview');
+  const [priceHistory, setPriceHistory] = useState<any[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
@@ -93,22 +99,23 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-        console.log("onAuthStateChanged fired with user:", firebaseUser);
+      console.log("onAuthStateChanged fired with user:", firebaseUser);
       if (firebaseUser) {
-        // Check if user is admin in Firestore
-        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-        const isAdmin = userDoc.exists() && userDoc.data().role === 'admin';
-        const isDefaultAdmin = firebaseUser.email === "qydalrfyd@gmail.com";
-        
-        if (isAdmin || isDefaultAdmin) {
-          setUser(firebaseUser);
-          // For backward compatibility with existing API calls that use JWT
-          // We might need to generate a token or update the backend to accept Firebase tokens
-          // For now, we'll just use the firebaseUser object to show the dashboard
-          setToken('firebase-auth-active'); 
-        } else {
-          setError('You are not authorized as an admin');
-          auth.signOut();
+        try {
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+          const isAdmin = userDoc.exists() && userDoc.data().role === 'admin';
+          const isDefaultAdmin = firebaseUser.email === "qydalrfyd@gmail.com";
+          
+          if (isAdmin || isDefaultAdmin) {
+            setUser(firebaseUser);
+            setToken('firebase-auth-active'); 
+            // Password confirmation will be required unless already confirmed in localStorage
+          } else {
+            setError('You are not authorized as an admin');
+            auth.signOut();
+          }
+        } catch (e) {
+          handleFirestoreError(e, OperationType.GET, `users/${firebaseUser.uid}`);
         }
       } else {
         console.log("User is null, setting user to null");
@@ -119,11 +126,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     return () => unsubscribe();
   }, []);
 
-  const [passwordConfirmed, setPasswordConfirmed] = useState(localStorage.getItem('password_confirmed') === 'true');
-
-  useEffect(() => {
-    localStorage.setItem('password_confirmed', passwordConfirmed.toString());
-  }, [passwordConfirmed]);
+  const [passwordConfirmed, setPasswordConfirmed] = useState(false);
 
   const handleGoogleLogin = async () => {
     try {
@@ -145,6 +148,9 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
         auth.signOut();
       }
     } catch (err: any) {
+      if (err.code === 'permission-denied') {
+        handleFirestoreError(err, OperationType.GET, `users/${auth.currentUser?.uid}`);
+      }
       setError(err.message || 'فشل تسجيل الدخول عبر جوجل');
     }
   };
@@ -163,6 +169,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
         setError('كلمة المرور غير صحيحة');
       }
     } catch (err: any) {
+      handleFirestoreError(err, OperationType.GET, 'settings/admin');
       setError('خطأ في التحقق من كلمة المرور');
     } finally {
       setLoading(false);
@@ -197,6 +204,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
       setPasswordSuccess(t('success_password_changed'));
       setNewPassword('');
     } catch (err: any) {
+      handleFirestoreError(err, OperationType.WRITE, 'settings/admin');
       console.error("Password change error:", err);
       setError(t('error_password_change_failed'));
     } finally {
@@ -214,7 +222,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
           realStats = { ...realStats, ...statsDoc.data() };
         }
       } catch (e) {
-        console.error("Failed to fetch stats from Firestore", e);
+        handleFirestoreError(e, OperationType.GET, 'settings/stats');
       }
 
       try {
@@ -223,7 +231,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
         const visitorsData = visitorsSnap.docs.map(d => d.data());
         setVisitors(visitorsData);
       } catch (e) {
-        console.error("Failed to fetch visitors from Firestore", e);
+        handleFirestoreError(e, OperationType.LIST, 'visitors');
       }
       
       let settingsRes = { data: { siteName: "مراقب الذهب", contactEmail: "qydalrfyd@gmail.com", maintenanceMode: false } };
@@ -233,7 +241,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
           settingsRes.data = { ...settingsRes.data, ...settingsDoc.data() };
         }
       } catch (e) {
-        console.error("Failed to fetch settings from Firestore", e);
+        handleFirestoreError(e, OperationType.GET, 'settings/general');
       }
 
       const newsRes = { data: [] };
@@ -263,7 +271,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
           ratesData = { ...defaults, ...ratesDoc.data() };
         }
       } catch (e) {
-        console.error("Failed to fetch exchange rates from Firestore", e);
+        handleFirestoreError(e, OperationType.GET, 'settings/exchangeRates');
       }
 
       let apiKeysData: any = { manualPriceMode: false, manualPrice: 2150 };
@@ -278,7 +286,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
           };
         }
       } catch (e) {
-        console.error("Failed to fetch api keys from Firestore", e);
+        handleFirestoreError(e, OperationType.GET, 'settings/apiKeys');
       }
 
       setStats(realStats);
@@ -288,14 +296,48 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
       setExchangeRates(ratesData);
       setApiKeys(apiKeysData);
       setSubscribers(subsRes.data);
+
+      try {
+        const historyRes = await axios.get('/api/admin/price-history');
+        setPriceHistory(historyRes.data);
+      } catch (e) {
+        console.error("Failed to fetch price history", e);
+      }
     } catch (err) {
       console.error("fetchData error:", err);
     }
   };
 
   useEffect(() => {
-    if (token && passwordConfirmed) fetchData();
+    if (token && passwordConfirmed) {
+      fetchData();
+      fetchApiKeyInfo();
+    }
   }, [token, passwordConfirmed]);
+
+  const fetchApiKeyInfo = async () => {
+    try {
+      const res = await axios.get('/api/admin/api-key');
+      setApiKeyInfo(res.data);
+    } catch (err) {
+      console.error("Failed to fetch API key info", err);
+    }
+  };
+
+  const handleUpdateApiKey = async () => {
+    if (!newApiKey.trim()) return;
+    setApiKeyLoading(true);
+    try {
+      await axios.post('/api/admin/api-key', { apiKey: newApiKey.trim() });
+      showSuccess("تم تحديث مفتاح الـ API بنجاح");
+      setNewApiKey('');
+      fetchApiKeyInfo();
+    } catch (err) {
+      setError("فشل تحديث مفتاح الـ API");
+    } finally {
+      setApiKeyLoading(false);
+    }
+  };
 
   const handleSaveSettings = async () => {
     setSaveLoading(true);
@@ -304,6 +346,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
       await setDoc(doc(db, 'settings', 'general'), settings);
       showSuccess(t('success_settings_saved'));
     } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'settings/general');
       setError(t('error_settings_save_failed'));
     } finally {
       setSaveLoading(false);
@@ -317,6 +360,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
       await setDoc(doc(db, 'settings', 'exchangeRates'), exchangeRates);
       showSuccess(t('success_rates_saved'));
     } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'settings/exchangeRates');
       setError(t('error_rates_save_failed'));
     } finally {
       setSaveLoading(false);
@@ -384,7 +428,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     }
   };
 
-  if (!user && !auth.currentUser) {
+  if (!passwordConfirmed && !user) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center p-6" dir={isRTL ? "rtl" : "ltr"}>
         <div className="bg-card p-8 rounded-2xl shadow-xl w-full max-w-md border border-gold/10">
@@ -413,20 +457,12 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     );
   }
 
-  // Show loading only on initial load if user is authenticated but state not yet updated or stats not loaded
-  if ((!user && auth.currentUser) || (user && !stats && !error && !successMessage)) {
-    return (
-      <div className="min-h-screen bg-bg flex items-center justify-center">
-        <RefreshCw className="w-10 h-10 text-primary animate-spin" />
-      </div>
-    );
-  }
-
-  if (!passwordConfirmed) {
+  if (!passwordConfirmed && user) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center p-6" dir={isRTL ? "rtl" : "ltr"}>
         <div className="bg-card p-8 rounded-2xl shadow-xl w-full max-w-md border border-gold/10">
           <h2 className="text-2xl font-bold text-white mb-6 text-center">تأكيد كلمة المرور</h2>
+          <p className="text-gray-400 text-sm mb-6 text-center">أنت مسجل الدخول كـ {user.email}. يرجى تأكيد كلمة مرور الإدارة للمتابعة.</p>
           <form onSubmit={confirmPassword} className="space-y-4">
             <input 
               type="password" 
@@ -441,6 +477,12 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
               {loading ? 'جاري التحقق...' : 'تأكيد'}
             </button>
           </form>
+          <button 
+            onClick={() => { auth.signOut(); setToken(null); setUser(null); }}
+            className="mt-4 w-full py-2 text-gray-500 hover:text-white text-xs transition-colors"
+          >
+            تسجيل الخروج من {user.email}
+          </button>
         </div>
       </div>
     );
@@ -900,12 +942,12 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
 
                 <div className="pt-6 border-t border-white/5 space-y-4">
                   <h4 className="text-sm font-bold text-white">إضافة عملة جديدة:</h4>
-                  <div className="flex gap-4">
+                  <div className="space-y-4">
                     <input 
                       type="text" 
                       placeholder="رمز العملة (مثلاً: SAR)"
                       id="newCurrencyCode"
-                      className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-primary uppercase"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-primary uppercase"
                     />
                     <button 
                       onClick={() => {
@@ -916,10 +958,10 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                           input.value = '';
                         }
                       }}
-                      className="px-6 bg-primary/10 text-primary border border-primary/20 rounded-xl font-bold hover:bg-primary/20 transition-all flex items-center gap-2"
+                      className="w-full py-3 bg-primary/10 text-primary border border-primary/20 rounded-xl font-bold hover:bg-primary/20 transition-all flex items-center justify-center gap-2"
                     >
                       <Plus size={18} />
-                      إضافة
+                      إضافة العملة
                     </button>
                   </div>
                 </div>
@@ -1063,29 +1105,28 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                       setSaveLoading(true);
                       setError(''); // Clear previous errors
                       try {
-                        const res = await axios.get('/api/gold-price?force=true');
-                        const newPrice = res.data.price;
-                        const newTimestamp = res.data.timestamp || Date.now();
-                        
-                        // Update local stats immediately to show the new price without a full fetchData
-                        setStats(prev => prev ? {
-                          ...prev,
-                          latestPrice: { 
-                            price: newPrice, 
-                            timestamp: new Date(newTimestamp).toISOString() 
-                          }
-                        } : null);
-                        
-                        showSuccess(`تم تحديث الأسعار بنجاح! السعر الحالي: $${newPrice.toLocaleString()}`);
-                        
-                        // Notify the rest of the app
-                        window.dispatchEvent(new CustomEvent('price-updated'));
-                        
-                        // Optionally refresh other stats in the background
-                        fetchData();
-                      } catch (err) {
+                        const res = await axios.post('/api/admin/update-price');
+                        if (res.data.success) {
+                          const newPrice = res.data.data.price_usd;
+                          const newTimestamp = res.data.data.updated_at;
+                          
+                          setStats(prev => prev ? {
+                            ...prev,
+                            latestPrice: { 
+                              price: newPrice, 
+                              timestamp: newTimestamp 
+                            }
+                          } : null);
+                          
+                          showSuccess(`تم تحديث الأسعار بنجاح! السعر الحالي: $${newPrice.toLocaleString()}`);
+                          window.dispatchEvent(new CustomEvent('price-updated'));
+                          fetchData();
+                        } else {
+                          throw new Error(res.data.error);
+                        }
+                      } catch (err: any) {
                         console.error("Manual price update failed:", err);
-                        setError('فشل تحديث الأسعار - يرجى المحاولة لاحقاً');
+                        setError(err.message || 'فشل تحديث الأسعار - يرجى المحاولة لاحقاً');
                       } finally {
                         setSaveLoading(false);
                       }
@@ -1094,8 +1135,114 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                     className="w-full py-3 bg-primary/10 text-primary border border-primary/20 rounded-xl font-bold hover:bg-primary/20 transition-all flex items-center justify-center gap-2"
                   >
                     <RefreshCw className={saveLoading ? "animate-spin" : ""} size={18} />
-                    تحديث الأسعار الآن
+                    تحديث الأسعار الآن (MetalpriceAPI)
                   </button>
+                </div>
+              </div>
+
+              <div className="bg-card p-8 rounded-2xl border border-gold/10 shadow-lg space-y-6">
+                <h3 className="text-lg font-bold flex items-center gap-2 text-white">
+                  <Key size={20} className="text-primary" />
+                  إدارة مفتاح MetalpriceAPI
+                </h3>
+                <p className="text-gray-400 text-sm">
+                  يمكنك إضافة مفتاح API جديد هنا. سيتم استخدامه بدلاً من المفتاح الافتراضي في النظام.
+                </p>
+                
+                <div className="space-y-4">
+                  <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-xs font-bold text-gray-500">المفتاح الحالي:</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${apiKeyInfo.isFromFirestore ? 'bg-green-400/10 text-green-400' : 'bg-blue-400/10 text-blue-400'}`}>
+                        {apiKeyInfo.isFromFirestore ? 'مخصص (Firestore)' : 'افتراضي (Env)'}
+                      </span>
+                    </div>
+                    <div className="text-sm font-mono text-white">
+                      {apiKeyInfo.maskedKey || 'لا يوجد مفتاح مكون'}
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <label className="text-xs font-bold text-gray-500 block">إضافة مفتاح جديد:</label>
+                    <div className="space-y-4">
+                      <input 
+                        type="password" 
+                        value={newApiKey}
+                        onChange={(e) => setNewApiKey(e.target.value)}
+                        placeholder="أدخل مفتاح API الجديد هنا..."
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-primary"
+                      />
+                      <button 
+                        onClick={handleUpdateApiKey}
+                        disabled={apiKeyLoading || !newApiKey.trim()}
+                        className="w-full py-4 bg-primary text-black rounded-xl font-bold hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg"
+                      >
+                        {apiKeyLoading ? <RefreshCw className="animate-spin" size={18} /> : <Save size={18} />}
+                        تحديث مفتاح الـ API
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Price History Log */}
+              <div className="bg-card p-8 rounded-2xl border border-gold/10 shadow-lg space-y-6 lg:col-span-2">
+                <h3 className="text-lg font-bold flex items-center gap-2 text-white">
+                  <History size={20} className="text-primary" />
+                  سجل تحديثات الأسعار
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-right">
+                    <thead>
+                      <tr className="text-xs font-bold text-gray-500 border-b border-white/5">
+                        <th className="pb-4 px-4">التاريخ</th>
+                        <th className="pb-4 px-4">السعر (USD)</th>
+                        <th className="pb-4 px-4">صنعاء</th>
+                        <th className="pb-4 px-4">عدن</th>
+                        <th className="pb-4 px-4">التغير</th>
+                        <th className="pb-4 px-4">النوع</th>
+                        <th className="pb-4 px-4">API المتبقي</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-sm">
+                      {priceHistory.map((item) => (
+                        <tr key={item.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                          <td className="py-4 px-4 text-gray-400 font-mono text-xs">
+                            {new Date(item.updated_at).toLocaleString(locale)}
+                          </td>
+                          <td className="py-4 px-4 font-bold text-white">
+                            ${item.price_usd.toLocaleString()}
+                          </td>
+                          <td className="py-4 px-4 text-gray-300">
+                            {Math.round(item.price_sanaa).toLocaleString()}
+                          </td>
+                          <td className="py-4 px-4 text-gray-300">
+                            {Math.round(item.price_aden).toLocaleString()}
+                          </td>
+                          <td className="py-4 px-4">
+                            <div className={`flex items-center gap-1 font-bold ${
+                              item.change_type === 'up' ? 'text-green-500' : 
+                              item.change_type === 'down' ? 'text-red-500' : 'text-gray-500'
+                            }`}>
+                              {item.change_type === 'up' && <TrendingUp size={14} />}
+                              {item.change_type === 'down' && <TrendingDown size={14} />}
+                              {(item.change_value || 0).toFixed(2)}
+                            </div>
+                          </td>
+                          <td className="py-4 px-4">
+                            <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase ${
+                              item.update_type === 'manual' ? 'bg-blue-500/10 text-blue-500' : 'bg-purple-500/10 text-purple-500'
+                            }`}>
+                              {item.update_type === 'manual' ? 'يدوي' : 'تلقائي'}
+                            </span>
+                          </td>
+                          <td className="py-4 px-4 text-gray-500 font-mono text-xs">
+                            {item.remaining_api}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
 

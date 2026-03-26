@@ -3,19 +3,65 @@ import { createServer as createViteServer } from "vite";
 import axios from "axios";
 import path from "path";
 import dotenv from "dotenv";
+import admin from 'firebase-admin';
+import { initializeApp as initializeAdminApp, getApps as getAdminApps, getApp as getAdminApp } from 'firebase-admin/app';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
+import { getFirestore, collection, query, orderBy, limit, getDocs, addDoc, doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
-// Initialize Firebase for server-side access to settings
-const firebaseConfigPath = path.join(process.cwd(), 'firebase-applet-config.json');
+// Initialize Firebase for server-side access
 let db: any = null;
-if (fs.existsSync(firebaseConfigPath)) {
-  const firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, 'utf8'));
-  const app = initializeApp(firebaseConfig);
-  db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+let firebaseApp: any = null;
+
+const getDb = () => {
+  if (db) return db;
+
+  try {
+    const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
+    let firebaseConfig: any = null;
+    if (fs.existsSync(configPath)) {
+      firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    }
+
+    if (!firebaseConfig) {
+      console.error("Firebase config not found. Firestore will not be available.");
+      return null;
+    }
+
+    // Initialize Client SDK for Firestore (bypasses IAM issues by using API Key + Rules)
+    firebaseApp = initializeApp(firebaseConfig);
+    db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+    
+    // Also initialize Admin SDK for other tasks if needed (e.g. Auth)
+    const adminApps = getAdminApps();
+    if (adminApps.length === 0) {
+      initializeAdminApp({
+        projectId: firebaseConfig.projectId
+      });
+    }
+
+    console.log(`Firestore Client SDK initialized (Project: ${firebaseConfig.projectId}, Database: ${firebaseConfig.firestoreDatabaseId || 'default'})`);
+    return db;
+  } catch (err: any) {
+    console.error("Failed to initialize Firebase:", err.message);
+    return null;
+  }
+};
+
+// Initial attempt
+getDb();
+
+const METALPRICE_API_KEY = process.env.METALPRICE_API_KEY;
+const BACKEND_SECRET = "a1b2c3d4e5f6g7h8i9j0";
+
+if (!METALPRICE_API_KEY) {
+  console.warn("METALPRICE_API_KEY is missing in environment variables.");
 }
 
 let customExchangeRates = {
@@ -23,14 +69,125 @@ let customExchangeRates = {
   YER_ADEN: 1650
 };
 
-// Cache for gold price
+// Cache for gold price (now reading from Firestore)
 let goldPriceCache = {
-  price: 2150,
+  price: 0,
   timestamp: 0,
-  isFallback: false
+  isFallback: false,
+  change_value: 0,
+  change_type: 'stable'
 };
 
-const CACHE_DURATION = 1 * 60 * 1000; // 1 minute
+async function getApiKeyFromFirestore() {
+  const database = getDb();
+  if (!database) return null;
+  
+  try {
+    const docRef = doc(database, 'settings', 'api_keys');
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      return data?.METALPRICE_API_KEY || null;
+    }
+  } catch (error: any) {
+    console.error("Error fetching API key from Firestore:", error.message);
+    // If it's a permission error, it might be because the document doesn't have the backend_secret yet
+    if (error.message && error.message.includes('PERMISSION_DENIED')) {
+      console.warn("Permission denied fetching API key. This is expected if the document is not yet initialized with the backend secret.");
+    }
+  }
+  return null;
+}
+
+async function fetchGoldPriceFromAPI(updateType: 'manual' | 'auto' = 'manual') {
+  // Check Firestore first, then environment variable
+  const firestoreKey = await getApiKeyFromFirestore();
+  const activeKey = firestoreKey || process.env.METALPRICE_API_KEY;
+
+  if (!activeKey) {
+    throw new Error("METALPRICE_API_KEY is not configured in Firestore or environment variables");
+  }
+
+  try {
+    // 1. Fetch from MetalpriceAPI
+    const response = await axios.get(`https://api.metalpriceapi.com/v1/latest?api_key=${activeKey}&base=USD&currencies=XAU`);
+    
+    if (!response.data.success) {
+      throw new Error(response.data.error?.info || "MetalpriceAPI request failed");
+    }
+
+    const pricePerOunce = 1 / response.data.rates.XAU;
+    const remainingApi = response.data.remaining || 0;
+
+    // 2. Get last price from Firestore to calculate difference
+    const database = getDb();
+    if (!database) throw new Error("Database not initialized");
+    
+    const q = query(
+      collection(database, 'price_history'),
+      orderBy('updated_at', 'desc'),
+      limit(1)
+    );
+    const querySnapshot = await getDocs(q);
+    
+    let prevPrice = pricePerOunce;
+    if (!querySnapshot.empty) {
+      prevPrice = querySnapshot.docs[0].data().price_usd;
+    }
+
+    const changeValue = pricePerOunce - prevPrice;
+    const changeType = changeValue > 0 ? 'up' : (changeValue < 0 ? 'down' : 'stable');
+
+    const now = new Date().toISOString();
+    const priceData = {
+      price_usd: pricePerOunce,
+      price_sanaa: pricePerOunce * customExchangeRates.YER_SANAA,
+      price_aden: pricePerOunce * customExchangeRates.YER_ADEN,
+      updated_at: now,
+      update_type: updateType,
+      remaining_api: remainingApi,
+      change_value: Math.abs(changeValue),
+      change_type: changeType
+    };
+
+    // 3. Save to Firestore
+    try {
+      await addDoc(collection(database, 'price_history'), {
+        ...priceData,
+        backend_secret: BACKEND_SECRET
+      });
+      console.log("Price data saved to Firestore history.");
+    } catch (error: any) {
+      console.error("Error saving price history to Firestore:", error.message);
+    }
+    
+    // Update cache
+    goldPriceCache = {
+      price: pricePerOunce,
+      timestamp: Date.now(),
+      isFallback: false,
+      change_value: Math.abs(changeValue),
+      change_type: changeType
+    };
+
+    return priceData;
+  } catch (error: any) {
+    console.error("Error fetching gold price from API:", error.message);
+    throw error;
+  }
+}
+
+// Automatic update every 12 hours
+setInterval(async () => {
+  console.log("Running automatic gold price update (12-hour interval)...");
+  try {
+    // Check if we have remaining API quota (optional, MetalpriceAPI returns it in response)
+    // For now, we just try to fetch. If it fails due to quota, we catch it.
+    await fetchGoldPriceFromAPI('auto');
+  } catch (err) {
+    console.error("Automatic update failed:", err);
+  }
+}, 12 * 60 * 60 * 1000);
 
 async function startServer() {
   const app = express();
@@ -38,129 +195,167 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Debug endpoint
+  app.get("/api/debug/firebase", (req, res) => {
+    const database = getDb();
+    res.json({
+      initialized: !!database,
+      configExists: fs.existsSync(path.resolve(process.cwd(), 'firebase-applet-config.json')),
+      env: {
+        METALPRICE_API_KEY: !!process.env.METALPRICE_API_KEY
+      }
+    });
+  });
+
+  // API Keys management
+  app.get("/api/admin/api-key", async (req, res) => {
+    try {
+      const firestoreKey = await getApiKeyFromFirestore();
+      const envKey = process.env.METALPRICE_API_KEY;
+      
+      const activeKey = firestoreKey || envKey;
+      
+      res.json({
+        hasKey: !!activeKey,
+        isFromFirestore: !!firestoreKey,
+        maskedKey: activeKey ? `${activeKey.substring(0, 4)}...${activeKey.substring(activeKey.length - 4)}` : null
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch API key info" });
+    }
+  });
+
+  app.post("/api/admin/api-key", async (req, res) => {
+    const { apiKey } = req.body;
+    if (!apiKey) {
+      return res.status(400).json({ error: "API key is required" });
+    }
+
+    const database = getDb();
+    if (!database) {
+      return res.status(500).json({ error: "Firebase not initialized" });
+    }
+
+    try {
+      await setDoc(doc(database, 'settings', 'api_keys'), {
+        METALPRICE_API_KEY: apiKey,
+        updatedAt: serverTimestamp(),
+        backend_secret: BACKEND_SECRET
+      }, { merge: true });
+      
+      res.json({ success: true, message: "API key updated successfully" });
+    } catch (error: any) {
+      console.error("Error updating API key:", error.message);
+      res.status(500).json({ error: "Failed to update API key", details: error.message });
+    }
+  });
+
   // API routes
   app.get("/api/exchange-rates", (req, res) => {
     res.json(customExchangeRates);
   });
 
   app.post("/api/admin/exchange-rates", (req, res) => {
-    // In a real app, verify admin token here
     customExchangeRates = { ...customExchangeRates, ...req.body };
     res.json({ success: true });
   });
 
-  // Proxy endpoint with caching to avoid rate limits (10 requests/hour)
-  app.get("/api/gold-price", async (req, res) => {
-    // Prevent browser caching so the client always gets the latest price
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-
-    const now = Date.now();
-    const force = req.query.force === 'true';
-    
-    // Return cached price if valid and not forced
-    if (!force && goldPriceCache.price > 0 && (now - goldPriceCache.timestamp < CACHE_DURATION)) {
-      console.log("Serving gold price from server cache");
-      return res.json(goldPriceCache);
+  // Manual update endpoint
+  app.post("/api/admin/update-price", async (req, res) => {
+    try {
+      if (!METALPRICE_API_KEY) {
+        return res.status(400).json({ success: false, error: "METALPRICE_API_KEY is missing in environment variables. Please add it in the settings." });
+      }
+      const data = await fetchGoldPriceFromAPI('manual');
+      res.json({ success: true, data });
+    } catch (error: any) {
+      console.error("Error in /api/admin/update-price:", error);
+      res.status(500).json({ success: false, error: error.message });
     }
+  });
 
-    console.log(force ? "Forced refresh, fetching fresh gold price..." : "Cache expired or empty, fetching fresh gold price...");
+  // History endpoint
+  app.get("/api/admin/price-history", async (req, res) => {
+    try {
+      const database = getDb();
+      if (!database) throw new Error("Firebase not initialized");
+      
+      const q = query(
+        collection(database, 'price_history'),
+        orderBy('updated_at', 'desc'),
+        limit(50)
+      );
+      const querySnapshot = await getDocs(q);
+      
+      const history = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      res.json(history);
+    } catch (error: any) {
+      console.error("Error in /api/admin/price-history:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Proxy endpoint for visitors (reads from Firestore)
+  app.get("/api/gold-price", async (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     
     try {
-      if (!db) throw new Error("Firebase not initialized on server");
+      const database = getDb();
+      if (!database) {
+        console.error("Firebase not initialized in /api/gold-price");
+        return res.status(500).json({ error: "Firebase not initialized" });
+      }
 
-      // 1. Get Settings from Firestore
-      const settingsDoc = await getDoc(doc(db, 'settings', 'apiKeys'));
-      const settingsData = settingsDoc.exists() ? settingsDoc.data() : { manualPriceMode: false, manualPrice: 0 };
+      // Get latest from Firestore
+      console.log("Fetching latest gold price from Firestore...");
       
-      const manualPriceMode = settingsData.manualPriceMode || false;
-      const manualPrice = Number(settingsData.manualPrice) || 0;
-
-      // 2. Handle Manual Mode
-      if (manualPriceMode && Number.isFinite(manualPrice) && manualPrice > 0) {
-        goldPriceCache = {
-          price: manualPrice,
-          timestamp: now,
-          isFallback: true
-        };
-        return res.json(goldPriceCache);
+      // Try a simple fetch first to check connectivity/permissions
+      let querySnapshot;
+      try {
+        const q = query(
+          collection(database, 'price_history'),
+          orderBy('updated_at', 'desc'),
+          limit(1)
+        );
+        querySnapshot = await getDocs(q);
+      } catch (innerError: any) {
+        console.error("Firestore query failed:", innerError.message);
+        throw innerError;
       }
-
-      // 3. Fetch from multiple sources for reliability
-      const sources = [
-        { 
-          name: 'Google Scraping (USD/oz)', 
-          url: 'https://www.google.com/search?q=gold+price+per+ounce+usd',
-          headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
-          parser: (text: string) => {
-            // Look for the price in the Google search result
-            const match = text.match(/<span class="pclqee">([\d,.]+)<\/span>/) || 
-                          text.match(/data-precision="2">([\d,.]+)<\/span>/) ||
-                          text.match(/<span>(\d{1,3}(?:,\d{3})*(?:\.\d+)?)<\/span>\s*<span[^>]*>USD<\/span>/);
-            return match ? Number(match[1].replace(/,/g, '')) : 0;
-          }
-        },
-        {
-          name: 'Gold-API (Alternative)',
-          url: 'https://api.gold-api.com/api/gold',
-          parser: (data: any) => Number(data.price)
-        }
-      ];
-
-      for (const source of sources) {
-        try {
-          console.log(`Fetching from ${source.name}...`);
-          const response = await axios.get(source.url, { 
-            timeout: 5000,
-            headers: source.headers || {}
-          });
-          
-          let price = 0;
-          if (source.parser) {
-            price = source.parser(response.data);
-          } else if (source.name === 'Gold-API') price = Number(response.data.price);
-          else if (source.name === 'CoinGecko (PAXG)') price = Number(response.data['pax-gold']?.usd);
-          else if (source.name === 'Binance (PAXG)') price = Number(response.data.price);
-
-          if (price > 0) {
-            console.log(`Successfully fetched price (${price}) using ${source.name}`);
-            goldPriceCache = { price, timestamp: now, isFallback: false };
-            
-            // Update stats
-            try {
-              await setDoc(doc(db, 'settings', 'stats'), {
-                latestPrice: { price, timestamp: new Date(now).toISOString() }
-              }, { merge: true });
-            } catch (dbErr) { console.warn("Failed to update stats:", dbErr); }
-            
-            return res.json(goldPriceCache);
-          }
-        } catch (err: any) {
-          console.warn(`${source.name} failed:`, err.message);
-        }
-      }
-
-      // 4. Final Fallback (Cache or Default)
-      console.error("All public API attempts failed.");
       
-      if (goldPriceCache.price > 0) {
-        console.log("Using stale cache as last-resort fallback.");
-        goldPriceCache.isFallback = true;
-        return res.json(goldPriceCache);
+      if (!querySnapshot.empty) {
+        const latest = querySnapshot.docs[0].data();
+        console.log("Latest price found:", latest.price_usd);
+        return res.json({
+          price: latest.price_usd,
+          timestamp: new Date(latest.updated_at).getTime(),
+          isFallback: false,
+          change_value: latest.change_value,
+          change_type: latest.change_type,
+          price_sanaa: latest.price_sanaa,
+          price_aden: latest.price_aden
+        });
       }
 
-      // Default
-      goldPriceCache = { price: 2500, timestamp: now, isFallback: true };
-      res.json(goldPriceCache);
-
-    } catch (error: any) {
-      console.error("Gold price fetch error:", error.message);
+      console.log("No price history found in Firestore, returning default.");
+      // If no history, return default
       res.json({
-        price: (Number.isFinite(goldPriceCache.price) && goldPriceCache.price > 0) ? goldPriceCache.price : 2500,
-        timestamp: now,
-        isFallback: true
+        price: 2500,
+        timestamp: Date.now(),
+        isFallback: true,
+        change_value: 0,
+        change_type: 'stable'
       });
+    } catch (error: any) {
+      console.error("Error in /api/gold-price:", error);
+      // Check for specific Firestore permission errors
+      if (error.message && error.message.includes('PERMISSION_DENIED')) {
+        return res.status(500).json({ 
+          error: "Permission denied accessing database. Please ensure Firebase is correctly set up.",
+          details: error.message
+        });
+      }
+      res.status(500).json({ error: error.message || "Internal server error" });
     }
   });
 
