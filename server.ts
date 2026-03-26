@@ -395,6 +395,30 @@ async function startServer() {
     res.json([]);
   });
 
+  app.get("/api/status", async (req, res) => {
+    const database = getDb();
+    const hasApiKey = !!process.env.METALPRICE_API_KEY;
+    const hasFirebaseConfig = fs.existsSync(path.resolve(process.cwd(), 'firebase-applet-config.json'));
+    
+    let firestoreStatus = "Not connected";
+    if (database) {
+      try {
+        const testDoc = await getDoc(doc(database, 'settings', 'general'));
+        firestoreStatus = testDoc.exists() ? "Connected & Authorized" : "Connected (Doc not found)";
+      } catch (e: any) {
+        firestoreStatus = `Error: ${e.message}`;
+      }
+    }
+
+    res.json({
+      env: process.env.NODE_ENV || "development",
+      apiKeySet: hasApiKey,
+      firebaseConfigExists: hasFirebaseConfig,
+      firestoreStatus,
+      timestamp: new Date().toISOString()
+    });
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
