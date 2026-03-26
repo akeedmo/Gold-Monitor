@@ -76,6 +76,8 @@ async function getApiKeyFromFirestore() {
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
       const data = docSnap.data();
+      // FORCE COMMIT: Added support for lowercase api key field from Firebase
+      // This ensures that if the user typed 'metalpriceapi_key' instead of 'METALPRICE_API_KEY', it still works.
       return data?.METALPRICE_API_KEY || data?.metalpriceapi_key || null;
     }
   } catch (error: any) {
