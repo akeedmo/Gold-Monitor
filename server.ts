@@ -3,8 +3,6 @@ import { createServer as createViteServer } from "vite";
 import axios from "axios";
 import path from "path";
 import dotenv from "dotenv";
-import admin from 'firebase-admin';
-import { initializeApp as initializeAdminApp, getApps as getAdminApps, getApp as getAdminApp } from 'firebase-admin/app';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, query, orderBy, limit, getDocs, addDoc, doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import fs from 'fs';
@@ -17,7 +15,6 @@ dotenv.config();
 
 // Initialize Firebase for server-side access
 let db: any = null;
-let firebaseApp: any = null;
 
 const getDb = () => {
   if (db) return db;
@@ -34,22 +31,14 @@ const getDb = () => {
       return null;
     }
 
-    // Initialize Client SDK for Firestore (bypasses IAM issues by using API Key + Rules)
-    firebaseApp = initializeApp(firebaseConfig);
+    // Initialize Client SDK (Uses API Key + Rules, avoids IAM issues in this environment)
+    const firebaseApp = initializeApp(firebaseConfig);
     db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
     
-    // Also initialize Admin SDK for other tasks if needed (e.g. Auth)
-    const adminApps = getAdminApps();
-    if (adminApps.length === 0) {
-      initializeAdminApp({
-        projectId: firebaseConfig.projectId
-      });
-    }
-
     console.log(`Firestore Client SDK initialized (Project: ${firebaseConfig.projectId}, Database: ${firebaseConfig.firestoreDatabaseId || 'default'})`);
     return db;
   } catch (err: any) {
-    console.error("Failed to initialize Firebase:", err.message);
+    console.error("Failed to initialize Firebase Client SDK:", err.message);
     return null;
   }
 };
@@ -91,10 +80,6 @@ async function getApiKeyFromFirestore() {
     }
   } catch (error: any) {
     console.error("Error fetching API key from Firestore:", error.message);
-    // If it's a permission error, it might be because the document doesn't have the backend_secret yet
-    if (error.message && error.message.includes('PERMISSION_DENIED')) {
-      console.warn("Permission denied fetching API key. This is expected if the document is not yet initialized with the backend secret.");
-    }
   }
   return null;
 }
@@ -136,7 +121,6 @@ async function fetchGoldPriceFromAPI(updateType: 'manual' | 'auto' = 'manual') {
     const remainingApi = response.data.remaining || 0;
 
     // 2. Get last price from Firestore to calculate difference
-    const database = getDb();
     if (!database) throw new Error("Database not initialized");
     
     const q = query(
@@ -328,19 +312,12 @@ async function startServer() {
       // Get latest from Firestore
       console.log("Fetching latest gold price from Firestore...");
       
-      // Try a simple fetch first to check connectivity/permissions
-      let querySnapshot;
-      try {
-        const q = query(
-          collection(database, 'price_history'),
-          orderBy('updated_at', 'desc'),
-          limit(1)
-        );
-        querySnapshot = await getDocs(q);
-      } catch (innerError: any) {
-        console.error("Firestore query failed:", innerError.message);
-        throw innerError;
-      }
+      const q = query(
+        collection(database, 'price_history'),
+        orderBy('updated_at', 'desc'),
+        limit(1)
+      );
+      const querySnapshot = await getDocs(q);
       
       if (!querySnapshot.empty) {
         const latest = querySnapshot.docs[0].data();
