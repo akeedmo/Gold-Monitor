@@ -76,7 +76,7 @@ async function getApiKeyFromFirestore() {
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
       const data = docSnap.data();
-      return data?.METALPRICE_API_KEY || null;
+      return data?.METALPRICE_API_KEY || data?.metalpriceapi_key || null;
     }
   } catch (error: any) {
     console.error("Error fetching API key from Firestore:", error.message);
@@ -397,14 +397,22 @@ async function startServer() {
 
   app.get("/api/status", async (req, res) => {
     const database = getDb();
-    const hasApiKey = !!process.env.METALPRICE_API_KEY;
+    const hasEnvApiKey = !!process.env.METALPRICE_API_KEY;
     const hasFirebaseConfig = fs.existsSync(path.resolve(process.cwd(), 'firebase-applet-config.json'));
     
     let firestoreStatus = "Not connected";
+    let hasFirestoreApiKey = false;
+
     if (database) {
       try {
-        const testDoc = await getDoc(doc(database, 'settings', 'general'));
-        firestoreStatus = testDoc.exists() ? "Connected & Authorized" : "Connected (Doc not found)";
+        const testDoc = await getDoc(doc(database, 'settings', 'api_keys'));
+        if (testDoc.exists()) {
+          firestoreStatus = "Connected & Authorized";
+          const data = testDoc.data();
+          hasFirestoreApiKey = !!(data?.METALPRICE_API_KEY || data?.metalpriceapi_key);
+        } else {
+          firestoreStatus = "Connected (api_keys document not found)";
+        }
       } catch (e: any) {
         firestoreStatus = `Error: ${e.message}`;
       }
@@ -412,7 +420,8 @@ async function startServer() {
 
     res.json({
       env: process.env.NODE_ENV || "development",
-      apiKeySet: hasApiKey,
+      envApiKeySet: hasEnvApiKey,
+      firestoreApiKeySet: hasFirestoreApiKey,
       firebaseConfigExists: hasFirebaseConfig,
       firestoreStatus,
       timestamp: new Date().toISOString()
