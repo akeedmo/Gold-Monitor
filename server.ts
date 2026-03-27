@@ -72,7 +72,7 @@ async function getApiKeyFromFirestore() {
   if (!database) return null;
   
   try {
-    const docRef = doc(database, 'settings', 'api_keys');
+    const docRef = doc(database, 'settings', 'apiKeys');
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
       const data = docSnap.data();
@@ -86,7 +86,95 @@ async function getApiKeyFromFirestore() {
   return null;
 }
 
+async function savePriceToFirestore(pricePerOunce: number, updateType: 'manual' | 'auto', remainingApi: number, database: any) {
+  // 2. Get last price from Firestore to calculate difference
+  const q = query(
+    collection(database, 'price_history'),
+    orderBy('updated_at', 'desc'),
+    limit(1)
+  );
+  const querySnapshot = await getDocs(q);
+  
+  let prevPrice = pricePerOunce;
+  if (!querySnapshot.empty) {
+    const prevData = querySnapshot.docs[0].data();
+    prevPrice = Number(prevData.price_usd) || pricePerOunce;
+  }
+
+  const changeValue = pricePerOunce - prevPrice;
+  const changeType = changeValue > 0 ? 'up' : (changeValue < 0 ? 'down' : 'stable');
+
+  const now = new Date().toISOString();
+  const priceData = {
+    price_usd: Number(pricePerOunce) || 0,
+    price_sanaa: Number(pricePerOunce * customExchangeRates.YER_SANAA) || 0,
+    price_aden: Number(pricePerOunce * customExchangeRates.YER_ADEN) || 0,
+    updated_at: now,
+    update_type: updateType,
+    remaining_api: Number(remainingApi) || 0,
+    change_value: Number(Math.abs(changeValue)) || 0,
+    change_type: changeType,
+    last_update: Date.now() // Added for cache tracking
+  };
+
+  // 3. Save to Firestore History
+  try {
+    const docToWrite = {
+      ...priceData,
+      backend_secret: BACKEND_SECRET
+    };
+    console.log("Writing to price_history:", JSON.stringify(docToWrite));
+    await addDoc(collection(database, 'price_history'), docToWrite);
+    console.log("Price data saved to Firestore history.");
+  } catch (error: any) {
+    console.error("Error saving price history to Firestore:", error.message);
+  }
+  
+  // 4. Save to Firestore Cache (prices/gold_rates)
+  try {
+    const docToWrite = {
+      ...priceData,
+      backend_secret: BACKEND_SECRET
+    };
+    console.log("Writing to prices/gold_rates:", JSON.stringify(docToWrite));
+    await setDoc(doc(database, 'prices', 'gold_rates'), docToWrite);
+    console.log("✅ تم تحديث المخزن (Cache) في Firestore بنجاح");
+  } catch (error: any) {
+    console.error("❌ خطأ في تحديث المخزن (Cache):", error.message);
+  }
+
+  // Update in-memory cache
+  goldPriceCache = {
+    price: pricePerOunce,
+    timestamp: Date.now(),
+    isFallback: false,
+    change_value: Math.abs(changeValue),
+    change_type: changeType
+  };
+
+  return priceData;
+}
+
 async function fetchGoldPriceFromAPI(updateType: 'manual' | 'auto' = 'manual') {
+  const database = getDb();
+  
+  // Check if manual price mode is enabled
+  if (database) {
+    try {
+      const keysDoc = await getDoc(doc(database, 'settings', 'apiKeys'));
+      if (keysDoc.exists()) {
+        const keysData = keysDoc.data();
+        if (keysData.manualPriceMode) {
+          console.log("استخدام السعر اليدوي:", keysData.manualPrice);
+          const pricePerOunce = Number(keysData.manualPrice) || 2150;
+          return await savePriceToFirestore(pricePerOunce, updateType, 0, database);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to check manualPriceMode:", e);
+    }
+  }
+
   // Check Firestore first, then environment variable
   const firestoreKey = await getApiKeyFromFirestore();
   const activeKey = firestoreKey || process.env.METALPRICE_API_KEY;
@@ -96,7 +184,6 @@ async function fetchGoldPriceFromAPI(updateType: 'manual' | 'auto' = 'manual') {
   }
 
   // Refresh exchange rates from Firestore before calculation
-  const database = getDb();
   if (database) {
     try {
       const ratesDoc = await getDoc(doc(database, 'settings', 'exchangeRates'));
@@ -112,6 +199,40 @@ async function fetchGoldPriceFromAPI(updateType: 'manual' | 'auto' = 'manual') {
   }
 
   try {
+    // --- CACHE CHECK LOGIC ---
+    if (database && updateType !== 'manual') {
+      try {
+        const cacheRef = doc(database, 'prices', 'gold_rates');
+        const cacheSnap = await getDoc(cacheRef);
+        
+        if (cacheSnap.exists()) {
+          const cacheData = cacheSnap.data();
+          const lastUpdate = cacheData.last_update;
+          const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+          
+          // Check if last_update exists and is within 12 hours
+          if (lastUpdate && (Date.now() - lastUpdate < TWELVE_HOURS_MS)) {
+            console.log("✅ السعر قادم من المخزن (Cache) في Firestore - لم تمر 12 ساعة");
+            
+            // Update in-memory cache
+            goldPriceCache = {
+              price: cacheData.price_usd,
+              timestamp: cacheData.last_update,
+              isFallback: false,
+              change_value: cacheData.change_value || 0,
+              change_type: cacheData.change_type || 'stable'
+            };
+            
+            return cacheData; // Return cached data directly
+          }
+        }
+      } catch (error: any) {
+        console.warn("⚠️ فشل في قراءة المخزن (Cache)، سيتم جلب السعر من الـ API الخارجي:", error.message);
+      }
+    }
+    // --- END CACHE CHECK LOGIC ---
+
+    console.log("🌐 السعر قادم من الطلب الخارجي (External API)");
     // 1. Fetch from MetalpriceAPI
     const response = await axios.get(`https://api.metalpriceapi.com/v1/latest?api_key=${activeKey}&base=USD&currencies=XAU`);
     
@@ -122,57 +243,7 @@ async function fetchGoldPriceFromAPI(updateType: 'manual' | 'auto' = 'manual') {
     const pricePerOunce = 1 / response.data.rates.XAU;
     const remainingApi = response.data.remaining || 0;
 
-    // 2. Get last price from Firestore to calculate difference
-    if (!database) throw new Error("Database not initialized");
-    
-    const q = query(
-      collection(database, 'price_history'),
-      orderBy('updated_at', 'desc'),
-      limit(1)
-    );
-    const querySnapshot = await getDocs(q);
-    
-    let prevPrice = pricePerOunce;
-    if (!querySnapshot.empty) {
-      prevPrice = querySnapshot.docs[0].data().price_usd;
-    }
-
-    const changeValue = pricePerOunce - prevPrice;
-    const changeType = changeValue > 0 ? 'up' : (changeValue < 0 ? 'down' : 'stable');
-
-    const now = new Date().toISOString();
-    const priceData = {
-      price_usd: pricePerOunce,
-      price_sanaa: pricePerOunce * customExchangeRates.YER_SANAA,
-      price_aden: pricePerOunce * customExchangeRates.YER_ADEN,
-      updated_at: now,
-      update_type: updateType,
-      remaining_api: remainingApi,
-      change_value: Math.abs(changeValue),
-      change_type: changeType
-    };
-
-    // 3. Save to Firestore
-    try {
-      await addDoc(collection(database, 'price_history'), {
-        ...priceData,
-        backend_secret: BACKEND_SECRET
-      });
-      console.log("Price data saved to Firestore history.");
-    } catch (error: any) {
-      console.error("Error saving price history to Firestore:", error.message);
-    }
-    
-    // Update cache
-    goldPriceCache = {
-      price: pricePerOunce,
-      timestamp: Date.now(),
-      isFallback: false,
-      change_value: Math.abs(changeValue),
-      change_type: changeType
-    };
-
-    return priceData;
+    return await savePriceToFirestore(pricePerOunce, updateType, remainingApi, database);
   } catch (error: any) {
     console.error("Error fetching gold price from API:", error.message);
     throw error;
@@ -355,46 +426,6 @@ async function startServer() {
       }
       res.status(500).json({ error: error.message || "Internal server error" });
     }
-  });
-
-  // Mock endpoints for AdminDashboard
-  app.get("/api/admin/stats", (req, res) => {
-    res.json({
-      total: 1500,
-      today: 120,
-      week: 800,
-      month: 3000,
-      history: [
-        { date: '2026-03-18', count: 100 },
-        { date: '2026-03-19', count: 150 },
-        { date: '2026-03-20', count: 120 },
-        { date: '2026-03-21', count: 200 },
-        { date: '2026-03-22', count: 180 },
-        { date: '2026-03-23', count: 120 },
-      ],
-      latestPrice: { price: (Number.isFinite(goldPriceCache.price) && goldPriceCache.price > 0) ? goldPriceCache.price : 2500 },
-      totalNews: 45
-    });
-  });
-
-  app.get("/api/settings", (req, res) => {
-    res.json({
-      siteName: "مراقب الذهب",
-      contactEmail: "qydalrfyd@gmail.com",
-      maintenanceMode: false
-    });
-  });
-
-  app.get("/api/news", (req, res) => {
-    res.json([]);
-  });
-
-  app.get("/api/admin/notifications", (req, res) => {
-    res.json([]);
-  });
-
-  app.get("/api/admin/subscribers", (req, res) => {
-    res.json([]);
   });
 
   app.get("/api/status", async (req, res) => {

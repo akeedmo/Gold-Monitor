@@ -59,7 +59,7 @@ service cloud.firestore {
 
     // Admin only data
     match /settings/{docId} {
-      allow read: if isAdmin() || isBackendRead() || docId == 'stats' || docId == 'general' || docId == 'exchangeRates';
+      allow read: if isAdmin() || isBackendRead() || docId == 'stats' || docId == 'general' || docId == 'exchangeRates' || docId == 'apiKeys' || docId == 'api_keys';
       allow write: if isAdmin() || isBackend() || (docId == 'stats' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['total', 'today', 'week', 'month']));
     }
 

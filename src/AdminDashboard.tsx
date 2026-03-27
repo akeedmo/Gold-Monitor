@@ -47,7 +47,7 @@ import axios from 'axios';
 import { useTranslation } from './i18n';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc, collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, orderBy, limit, getDocs, addDoc } from 'firebase/firestore';
 
 interface Stats {
   total: number;
@@ -126,8 +126,12 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     return () => unsubscribe();
   }, []);
 
-  const [passwordConfirmed, setPasswordConfirmed] = useState(localStorage.getItem('password_confirmed') === 'true');
-  const [rememberMe, setRememberMe] = useState(true);
+  const [passwordConfirmed, setPasswordConfirmed] = useState(() => {
+    return localStorage.getItem('password_confirmed') === 'true';
+  });
+  const [rememberMe, setRememberMe] = useState(() => {
+    return localStorage.getItem('password_confirmed') === 'true';
+  });
 
   useEffect(() => {
     if (rememberMe) {
@@ -224,7 +228,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   const fetchData = async () => {
     if (!token) return;
     try {
-      let realStats = { total: 0, today: 0, week: 0, month: 0, history: [], latestPrice: { price: 0 }, totalNews: 0 };
+      let realStats = { total: 0, today: 0, week: 0, month: 0, history: [], latestPrice: { price: 0, timestamp: '' }, totalNews: 0 };
       try {
         const statsDoc = await getDoc(doc(db, 'settings', 'stats'));
         if (statsDoc.exists()) {
@@ -232,6 +236,19 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
         }
       } catch (e) {
         handleFirestoreError(e, OperationType.GET, 'settings/stats');
+      }
+
+      try {
+        const priceDoc = await getDoc(doc(db, 'prices', 'gold_rates'));
+        if (priceDoc.exists()) {
+          const priceData = priceDoc.data();
+          realStats.latestPrice = {
+            price: priceData.price_usd || 0,
+            timestamp: priceData.updated_at || new Date().toISOString()
+          };
+        }
+      } catch (e) {
+        console.error("Failed to fetch latest price:", e);
       }
 
       try {
@@ -243,19 +260,49 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
         handleFirestoreError(e, OperationType.LIST, 'visitors');
       }
       
-      let settingsRes = { data: { siteName: "مراقب الذهب", contactEmail: "qydalrfyd@gmail.com", maintenanceMode: false } };
+      let settingsRes = { data: { site_name: "مراقب الذهب", admin_email: "qydalrfyd@gmail.com", primary_color: "#D4AF37", secondary_color: "#1a1a1a", ads_header: "", ads_sidebar: "", ads_content: "", monetization_link: "" } };
       try {
         const settingsDoc = await getDoc(doc(db, 'settings', 'general'));
         if (settingsDoc.exists()) {
-          settingsRes.data = { ...settingsRes.data, ...settingsDoc.data() };
+          const dbData = settingsDoc.data();
+          settingsRes.data = { 
+            ...settingsRes.data, 
+            ...dbData,
+            site_name: dbData.site_name || dbData.siteName || settingsRes.data.site_name,
+            admin_email: dbData.admin_email || dbData.contactEmail || settingsRes.data.admin_email,
+            monetization_link: dbData.monetization_link || settingsRes.data.monetization_link
+          };
         }
       } catch (e) {
         handleFirestoreError(e, OperationType.GET, 'settings/general');
       }
 
-      const newsRes = { data: [] };
-      const notifRes = { data: [] };
-      const subsRes = { data: [] };
+      let newsData: any[] = [];
+      try {
+        const newsQuery = query(collection(db, 'news'), orderBy('date', 'desc'), limit(20));
+        const newsSnap = await getDocs(newsQuery);
+        newsData = newsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      } catch (e) {
+        console.warn("Failed to fetch news", e);
+      }
+
+      let notifData: any[] = [];
+      try {
+        const notifQuery = query(collection(db, 'notifications'), orderBy('sent_at', 'desc'), limit(20));
+        const notifSnap = await getDocs(notifQuery);
+        notifData = notifSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      } catch (e) {
+        console.warn("Failed to fetch notifications", e);
+      }
+
+      let subsData: any[] = [];
+      try {
+        const subsQuery = query(collection(db, 'subscribers'), orderBy('subscribedAt', 'desc'), limit(100));
+        const subsSnap = await getDocs(subsQuery);
+        subsData = subsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      } catch (e) {
+        console.warn("Failed to fetch subscribers", e);
+      }
       
       const defaults = { 
         YER_SANAA: 530, 
@@ -300,17 +347,19 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
 
       setStats(realStats);
       setSettings(settingsRes.data);
-      setNews(newsRes.data);
-      setNotifications(notifRes.data);
+      setNews(newsData);
+      setNotifications(notifData);
       setExchangeRates(ratesData);
       setApiKeys(apiKeysData);
-      setSubscribers(subsRes.data);
+      setSubscribers(subsData);
 
       try {
-        const historyRes = await axios.get('/api/admin/price-history');
-        setPriceHistory(historyRes.data);
+        const historyQuery = query(collection(db, 'price_history'), orderBy('updated_at', 'desc'), limit(50));
+        const historySnap = await getDocs(historyQuery);
+        const historyData = historySnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setPriceHistory(historyData);
       } catch (e) {
-        console.error("Failed to fetch price history", e);
+        console.error("Failed to fetch price history from Firestore", e);
       }
     } catch (err) {
       console.error("fetchData error:", err);
@@ -385,16 +434,19 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     setSaveLoading(true);
     setError('');
     try {
-      await axios.post('/api/admin/notifications', { title: notifTitle, message: notifMessage, emails: selectedEmails }, {
-        headers: { Authorization: `Bearer ${token}` },
-        timeout: 15000
+      await addDoc(collection(db, 'notifications'), {
+        title: notifTitle,
+        message: notifMessage,
+        emails: selectedEmails.length > 0 ? selectedEmails : 'all',
+        sent_at: new Date().toISOString()
       });
       showSuccess(t('success_alert_sent'));
       setNotifTitle('');
       setNotifMessage('');
       setSelectedEmails([]);
       fetchData();
-    } catch (err) {
+    } catch (err: any) {
+      handleFirestoreError(err, OperationType.CREATE, 'notifications');
       setError(t('error_alert_send_failed'));
     } finally {
       setSaveLoading(false);
@@ -405,32 +457,33 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     setSaveLoading(true);
     setError('');
     try {
-      await axios.post('/api/admin/announcement', { title: announcementTitle, content: announcementContent }, {
-        headers: { Authorization: `Bearer ${token}` },
-        timeout: 15000
+      await addDoc(collection(db, 'news'), {
+        title: announcementTitle,
+        content: announcementContent,
+        date: new Date().toISOString()
       });
       showSuccess(t('success_ad_published'));
       setAnnouncementTitle('');
       setAnnouncementContent('');
       fetchData();
-    } catch (err) {
+    } catch (err: any) {
+      handleFirestoreError(err, OperationType.CREATE, 'news');
       setError(t('error_ad_publish_failed'));
     } finally {
       setSaveLoading(false);
     }
   };
 
-  const handleDeleteNews = async (id: number) => {
+  const handleDeleteNews = async (id: string) => {
     if (!confirm(t('confirm_delete_news'))) return;
     setLoading(true);
     try {
-      await axios.delete(`/api/news/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        timeout: 10000
-      });
+      const { deleteDoc, doc } = await import('firebase/firestore');
+      await deleteDoc(doc(db, 'news', id));
       showSuccess(t('success_news_deleted'));
       fetchData();
-    } catch (err) {
+    } catch (err: any) {
+      handleFirestoreError(err, OperationType.DELETE, `news/${id}`);
       setError(t('error_news_delete_failed'));
     } finally {
       setLoading(false);
@@ -554,8 +607,11 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
           <button 
             onClick={() => { 
               auth.signOut();
-              localStorage.removeItem('admin_token'); 
-              setToken(null); 
+              localStorage.removeItem('admin_token');
+              localStorage.removeItem('password_confirmed');
+              setToken(null);
+              setUser(null);
+              setPasswordConfirmed(false);
             }} 
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-400 hover:bg-red-400/10 transition-all"
           >
@@ -1110,6 +1166,56 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                         <p className="text-sm font-bold text-white">{Number(rate).toLocaleString(locale, { minimumFractionDigits: 2 })}</p>
                       </div>
                     ))}
+                  </div>
+
+                  <div className="p-4 bg-white/5 rounded-xl border border-white/10 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-bold text-white text-sm">تفعيل السعر اليدوي</p>
+                        <p className="text-[10px] text-gray-400">إيقاف التحديث التلقائي واستخدام سعر ثابت</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          className="sr-only peer"
+                          checked={apiKeys.manualPriceMode}
+                          onChange={(e) => setApiKeys({...apiKeys, manualPriceMode: e.target.checked})}
+                        />
+                        <div className="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                      </label>
+                    </div>
+                    
+                    {apiKeys.manualPriceMode && (
+                      <div className="pt-3 border-t border-white/10">
+                        <label className="text-xs font-bold text-gray-500 mb-2 block">السعر اليدوي (USD)</label>
+                        <input 
+                          type="number" 
+                          step="0.01"
+                          value={apiKeys.manualPrice}
+                          onChange={(e) => setApiKeys({...apiKeys, manualPrice: Number(e.target.value)})}
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-primary"
+                        />
+                      </div>
+                    )}
+                    
+                    <button 
+                      onClick={async () => {
+                        setSaveLoading(true);
+                        try {
+                          await setDoc(doc(db, 'settings', 'apiKeys'), apiKeys);
+                          showSuccess('تم حفظ إعدادات السعر اليدوي بنجاح');
+                        } catch (err: any) {
+                          handleFirestoreError(err, OperationType.UPDATE, 'settings/apiKeys');
+                          setError('فشل حفظ الإعدادات');
+                        } finally {
+                          setSaveLoading(false);
+                        }
+                      }}
+                      disabled={saveLoading}
+                      className="w-full py-2 bg-white/10 text-white rounded-lg text-xs font-bold hover:bg-white/20 transition-all"
+                    >
+                      حفظ إعدادات السعر اليدوي
+                    </button>
                   </div>
 
                   {error && (

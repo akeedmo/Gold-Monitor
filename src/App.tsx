@@ -1087,7 +1087,9 @@ function AppContent() {
     };
   }, [currency, yemenRegion]);
 
-  if (loading && location.pathname !== '/admin') {
+  const isAdminPage = location.pathname === '/admin';
+
+  if (loading && !isAdminPage) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center">
         <RefreshCw className="w-10 h-10 text-primary animate-spin" />
@@ -1097,7 +1099,8 @@ function AppContent() {
 
   return (
     <div className="min-h-screen flex flex-col bg-bg text-secondary" dir={isRTL ? "rtl" : "ltr"}>
-      <header className="bg-card border-b border-gold/20 sticky top-0 z-50 shadow-2xl">
+      {!isAdminPage && (
+        <header className="bg-card border-b border-gold/20 sticky top-0 z-50 shadow-2xl">
         <div className="max-w-7xl mx-auto w-full px-6 py-2 flex justify-between items-center">
           <div className="flex items-center gap-4">
             <Link to="/" className="w-10 h-10 gold-gradient rounded-lg flex items-center justify-center text-black shadow-lg shrink-0">
@@ -1173,10 +1176,11 @@ function AppContent() {
           </div>
         )}
       </header>
+      )}
 
-      <TickerBar prices={prices} currency={currency} />
+      {!isAdminPage && <TickerBar prices={prices} currency={currency} />}
 
-      {currency === 'YER' && (
+      {currency === 'YER' && !isAdminPage && (
         <div className="max-w-7xl mx-auto w-full px-6 pt-6 animate-in fade-in slide-in-from-top-4 duration-700">
           <div className="bg-card border border-gold/20 p-4 rounded-2xl shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -1206,7 +1210,7 @@ function AppContent() {
         </div>
       )}
 
-      <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-6">
+      <main className={`${isAdminPage ? 'flex-1' : 'flex-1 max-w-7xl mx-auto w-full px-6 py-6'}`}>
         {isLoggedIn && location.pathname === '/' && (
           <div className="mb-8 p-4 bg-gold-soft border border-gold/30 rounded-2xl flex justify-between items-center">
             <div className="flex items-center gap-3">
@@ -1230,30 +1234,37 @@ function AppContent() {
         </Routes>
       </main>
 
-      <BottomNav onRefresh={() => fetchData(true)} />
+      {!isAdminPage && <BottomNav onRefresh={() => fetchData(true)} />}
 
-      <footer className="bg-card border-t border-gold/20 py-12 px-6 mt-auto pb-32 md:pb-12 text-center">
-        <div className="max-w-7xl mx-auto w-full space-y-8">
-          <div className="flex flex-col items-center gap-4">
-            <div className="flex items-center gap-2 text-primary">
-              <Coins size={32} />
-              <span className="text-2xl font-bold gold-text-gradient">{t('site_title')}</span>
+      {!isAdminPage && (
+        <footer className="bg-card border-t border-gold/20 py-12 px-6 mt-auto pb-32 md:pb-12 text-center">
+          <div className="max-w-7xl mx-auto w-full space-y-8">
+            <div className="flex flex-col items-center gap-4">
+              <div className="flex items-center gap-2 text-primary">
+                <Coins size={32} />
+                <span className="text-2xl font-bold gold-text-gradient">{t('site_title')}</span>
+              </div>
+              <p className="text-gray-500 text-sm max-w-md mx-auto">{t('footer_desc')}</p>
+              <div className="flex items-center gap-2 text-primary text-sm font-bold">
+                <Mail size={16} />
+                <span>qydalrfyd@gmail.com</span>
+              </div>
             </div>
-            <p className="text-gray-500 text-sm max-w-md mx-auto">{t('footer_desc')}</p>
-            <div className="flex items-center gap-2 text-primary text-sm font-bold">
-              <Mail size={16} />
-              <span>qydalrfyd@gmail.com</span>
+            
+            <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-gray-500 text-xs font-bold">
+              <span>{t('all_rights_reserved')} {t('site_title')}</span>
+              {isLoggedIn && (
+                <button onClick={() => { 
+                  auth.signOut();
+                  localStorage.removeItem('admin_token'); 
+                  localStorage.removeItem('password_confirmed');
+                  window.location.reload(); 
+                }} className="hover:text-red-500 transition-colors">{t('logout')}</button>
+              )}
             </div>
           </div>
-          
-          <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-gray-500 text-xs font-bold">
-            <span>{t('all_rights_reserved')} {t('site_title')}</span>
-            {isLoggedIn && (
-              <button onClick={() => { localStorage.removeItem('admin_token'); window.location.reload(); }} className="hover:text-red-500 transition-colors">{t('logout')}</button>
-            )}
-          </div>
-        </div>
-      </footer>
+        </footer>
+      )}
     </div>
   );
 }
