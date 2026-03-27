@@ -136,7 +136,7 @@
       "schema": "Setting",
       "description": "App configuration"
     },
-    "/settings/api_keys": {
+    "/settings/apiKeys": {
       "schema": "ApiKeySetting",
       "description": "API key storage"
     },

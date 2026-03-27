@@ -33,9 +33,10 @@ const getDb = () => {
 
     // Initialize Client SDK (Uses API Key + Rules, avoids IAM issues in this environment)
     const firebaseApp = initializeApp(firebaseConfig);
-    db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+    db = firebaseConfig.firestoreDatabaseId ? getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId) : getFirestore(firebaseApp);
     
     console.log(`Firestore Client SDK initialized (Project: ${firebaseConfig.projectId}, Database: ${firebaseConfig.firestoreDatabaseId || 'default'})`);
+    console.log(`Firebase Config: ${JSON.stringify({ projectId: firebaseConfig.projectId, authDomain: firebaseConfig.authDomain })}`);
     return db;
   } catch (err: any) {
     console.error("Failed to initialize Firebase Client SDK:", err.message);
@@ -310,7 +311,7 @@ async function startServer() {
     }
 
     try {
-      await setDoc(doc(database, 'settings', 'api_keys'), {
+      await setDoc(doc(database, 'settings', 'apiKeys'), {
         METALPRICE_API_KEY: apiKey,
         updatedAt: serverTimestamp(),
         backend_secret: BACKEND_SECRET
