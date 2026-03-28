@@ -674,9 +674,9 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
               </h1>
               {dbStatus && activeTab === 'overview' && (
                 <div className="flex items-center gap-2 mt-1">
-                  <div className={`w-2 h-2 rounded-full ${dbStatus.firestoreStatus.includes('Connected') ? 'bg-green-500' : 'bg-red-500'}`} />
+                  <div className={`w-2 h-2 rounded-full ${dbStatus?.firestoreStatus?.includes('Connected') ? 'bg-green-500' : 'bg-red-500'}`} />
                   <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">
-                    {dbStatus.firestoreStatus}
+                    {dbStatus?.firestoreStatus}
                   </span>
                 </div>
               )}
@@ -809,7 +809,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                       <input 
                         type="checkbox" 
                         id={`sub-${sub.id}`}
-                        checked={selectedEmails.includes(sub.email)}
+                        checked={selectedEmails?.includes(sub.email)}
                         onChange={(e) => {
                           if (e.target.checked) {
                             setSelectedEmails([...selectedEmails, sub.email]);

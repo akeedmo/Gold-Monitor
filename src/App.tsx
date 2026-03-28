@@ -191,17 +191,23 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
   };
 
   const handleGoogleSubscribe = async () => {
+    if (subLoading) return;
+    
     try {
       const provider = new GoogleAuthProvider();
       // Call signInWithPopup immediately without any state changes before it
       // to preserve the user gesture and prevent popup blocking.
+      setSubLoading(true);
       const result = await signInWithPopup(auth, provider);
       
-      setSubLoading(true);
       if (result.user.email) {
         await handleSubscribe(null, result.user.email);
       }
     } catch (err: any) {
+      if (err.code === 'auth/cancelled-popup-request') {
+        // This happens if multiple popups are requested, we can ignore it
+        return;
+      }
       console.error("Google Sign-in error code:", err.code);
       console.error("Google Sign-in error message:", err.message);
       if (err.code === 'auth/popup-closed-by-user') {
