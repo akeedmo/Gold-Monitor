@@ -81,16 +81,8 @@ const TickerBar = ({ prices, currency }: { prices: GoldPrice[], currency: string
   );
 };
 
-const AdPlaceholder = ({ type }: { type: 'header' | 'sidebar' | 'content' }) => {
+const AdPlaceholder = ({ type, settings }: { type: 'header' | 'sidebar' | 'content', settings: any }) => {
   const { t } = useTranslation();
-  const [settings, setSettings] = useState<any>({});
-  useEffect(() => {
-    getDoc(doc(db, 'settings', 'general')).then(res => {
-      if (res.exists()) {
-        setSettings(res.data());
-      }
-    }).catch(console.error);
-  }, []);
 
   const adCode = settings[`ads_${type}`];
   if (adCode) {
@@ -168,7 +160,7 @@ const CurrencyLanguageSelector = ({ currency, setCurrency, language, setLanguage
   );
 };
 
-const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate, setCurrency, setLanguage, calcAmount, setCalcAmount, calcType, setCalcType, handleShare, goldData }: any) => {
+const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate, setCurrency, setLanguage, calcAmount, setCalcAmount, calcType, setCalcType, handleShare, goldData, settings }: any) => {
   const { t, language } = useTranslation();
   const locale = language === 'ar' ? 'ar-SA' : language === 'tr' ? 'tr-TR' : 'en-US';
   const [email, setEmail] = useState('');
@@ -225,16 +217,16 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
   return (
     <div className="space-y-8 pb-24 md:pb-8">
       <Helmet>
-        <title>مراقب الذهب | أسعار الذهب اليوم مباشرة</title>
-        <meta name="description" content="تابع أسعار الذهب العالمية والمحلية لحظة بلحظة. أدق الأسعار بجميع العملات واللغات. وجهتك الأولى للاستثمار الآمن." />
+        <title>{settings.site_name || t('site_title')} | {t('live_gold_prices') || 'أسعار الذهب اليوم مباشرة'}</title>
+        <meta name="description" content={t('site_description') || "تابع أسعار الذهب العالمية والمحلية لحظة بلحظة. أدق الأسعار بجميع العملات واللغات. وجهتك الأولى للاستثمار الآمن."} />
         <meta name="keywords" content="أسعار الذهب, سعر الذهب اليوم, Gold Price, اسعار الذهب مباشر" />
-        <meta property="og:title" content="مراقب الذهب | أسعار الذهب اليوم مباشرة" />
-        <meta property="og:description" content="تابع أسعار الذهب العالمية والمحلية لحظة بلحظة. أدق الأسعار بجميع العملات واللغات. وجهتك الأولى للاستثمار الآمن." />
+        <meta property="og:title" content={settings.site_name || t('site_title')} />
+        <meta property="og:description" content={t('site_description') || "تابع أسعار الذهب العالمية والمحلية لحظة بلحظة. أدق الأسعار بجميع العملات واللغات."} />
         <meta property="og:image" content="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=1200&h=630" />
-        <meta property="og:url" content="https://ais-dev-7cu4clajx54jrmaysp6ap2-57287700371.europe-west2.run.app" />
+        <meta property="og:url" content={window.location.href} />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="مراقب الذهب | أسعار الذهب اليوم مباشرة" />
-        <meta name="twitter:description" content="تابع أسعار الذهب العالمية والمحلية لحظة بلحظة. أدق الأسعار بجميع العملات واللغات." />
+        <meta name="twitter:title" content={settings.site_name || t('site_title')} />
+        <meta name="twitter:description" content={t('site_description') || "تابع أسعار الذهب العالمية والمحلية لحظة بلحظة. أدق الأسعار بجميع العملات واللغات."} />
         <meta name="twitter:image" content="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=1200&h=630" />
       </Helmet>
 
@@ -397,7 +389,7 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
   );
 };
 
-const ChartsPage = ({ chartData, currency, setCurrency, language, setLanguage }: any) => {
+const ChartsPage = ({ chartData, currency, setCurrency, language, setLanguage, settings }: any) => {
   const { t } = useTranslation();
   const locale = language === 'ar' ? 'ar-SA' : language === 'tr' ? 'tr-TR' : 'en-US';
   const [timeRange, setTimeRange] = useState('D1');
@@ -429,7 +421,7 @@ const ChartsPage = ({ chartData, currency, setCurrency, language, setLanguage }:
   return (
     <div className="space-y-8">
       <Helmet>
-        <title>{t('charts_analysis')}</title>
+        <title>{t('charts_analysis')} | {settings.site_name || t('site_title')}</title>
         <meta name="description" content={t('meta_desc_charts')} />
         <meta property="og:title" content={t('charts_analysis')} />
         <meta property="og:description" content={t('meta_desc_charts')} />
@@ -524,7 +516,7 @@ const ChartsPage = ({ chartData, currency, setCurrency, language, setLanguage }:
   );
 };
 
-const NewsPage = ({ news }: any) => {
+const NewsPage = ({ news, settings }: any) => {
   const { t, language } = useTranslation();
   const locale = language === 'ar' ? 'ar-SA' : language === 'tr' ? 'tr-TR' : 'en-US';
   const [newsList, setNewsList] = useState(news);
@@ -559,7 +551,7 @@ const NewsPage = ({ news }: any) => {
   return (
     <div className="space-y-8">
       <Helmet>
-        <title>{t('gold_news_markets')}</title>
+        <title>{t('gold_news_markets')} | {settings.site_name || t('site_title')}</title>
         <meta name="description" content={t('meta_desc_news')} />
         <meta property="og:title" content={t('gold_news_markets')} />
         <meta property="og:description" content={t('meta_desc_news')} />
@@ -570,6 +562,7 @@ const NewsPage = ({ news }: any) => {
         <meta name="twitter:image" content="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=1200&h=630" />
       </Helmet>
       <h2 className="text-3xl font-bold gold-text-gradient">{t('gold_news_markets')}</h2>
+      <AdPlaceholder type="header" settings={settings} />
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {newsList.map((item: any) => (
           <div key={item.id} className="bg-card p-6 rounded-3xl border border-gold/10 card-shadow hover:border-primary/30 transition-all group flex flex-col">
@@ -625,16 +618,17 @@ const NewsPage = ({ news }: any) => {
           </div>
         ))}
       </div>
+      <AdPlaceholder type="content" settings={settings} />
     </div>
   );
 };
 
-const TipsPage = () => {
+const TipsPage = ({ settings }: any) => {
   const { t } = useTranslation();
   return (
     <div className="space-y-8">
       <Helmet>
-        <title>{t('investment_tips')}</title>
+        <title>{t('investment_tips')} | {settings.site_name || t('site_title')}</title>
         <meta name="description" content={t('meta_desc_tips')} />
         <meta property="og:title" content={t('investment_tips')} />
         <meta property="og:description" content={t('meta_desc_tips')} />
@@ -645,6 +639,7 @@ const TipsPage = () => {
         <meta name="twitter:image" content="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=1200&h=630" />
       </Helmet>
       <h2 className="text-3xl font-bold gold-text-gradient">{t('investment_tips')}</h2>
+      <AdPlaceholder type="header" settings={settings} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {[
           { title: t('tip_1_title'), content: t('tip_1_desc'), icon: Lightbulb },
@@ -667,12 +662,12 @@ const TipsPage = () => {
   );
 };
 
-const AboutPage = () => {
+const AboutPage = ({ settings }: any) => {
   const { t } = useTranslation();
   return (
     <div className="space-y-8 max-w-3xl mx-auto">
       <Helmet>
-        <title>{t('about_title')}</title>
+        <title>{t('about_title')} | {settings.site_name || t('site_title')}</title>
         <meta name="description" content={t('meta_desc_about')} />
         <meta property="og:title" content={t('about_title')} />
         <meta property="og:description" content={t('meta_desc_about')} />
@@ -682,6 +677,7 @@ const AboutPage = () => {
         <meta name="twitter:description" content={t('meta_desc_about')} />
         <meta name="twitter:image" content="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=1200&h=630" />
       </Helmet>
+      <AdPlaceholder type="header" settings={settings} />
       <div className="bg-card p-12 rounded-3xl border border-gold/10 card-shadow text-center space-y-6">
         <div className="w-20 h-20 gold-gradient rounded-3xl flex items-center justify-center text-black mx-auto shadow-xl">
           <Coins size={40} />
@@ -692,7 +688,7 @@ const AboutPage = () => {
         </p>
         <div className="flex flex-col items-center gap-2 text-primary">
           <Mail size={20} />
-          <span className="text-sm font-bold">qydalrfyd@gmail.com</span>
+          <span className="text-sm font-bold">{settings.admin_email || 'qydalrfyd@gmail.com'}</span>
         </div>
         <div className="pt-8 grid grid-cols-3 gap-4">
           <div className="p-4 bg-white/5 rounded-2xl">
@@ -709,6 +705,7 @@ const AboutPage = () => {
           </div>
         </div>
       </div>
+      <AdPlaceholder type="content" settings={settings} />
     </div>
   );
 };
@@ -837,6 +834,12 @@ function AppContent() {
   const [yemenRegion, setYemenRegion] = useState(localStorage.getItem('yemenRegion') || 'ADEN');
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({ USD: 1 });
   const [lastUpdate, setLastUpdate] = useState(new Date());
+  const [settings, setSettings] = useState<any>({
+    site_name: "مراقب الذهب",
+    admin_email: "qydalrfyd@gmail.com",
+    primary_color: "#D4AF37",
+    secondary_color: "#1a1a1a"
+  });
   const [goldData, setGoldData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isFirstLoad, setIsFirstLoad] = useState(true);
@@ -951,7 +954,16 @@ function AppContent() {
       const formattedDate = lastUpdate.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
       const formattedTime = lastUpdate.toLocaleTimeString(locale);
       
-      const priceList = prices.map(p => `${p.type}: ${p.price.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`).join('\n');
+      const priceList = prices.map(p => {
+        // Force Arabic "عيار" for gold types in share text regardless of language
+        let typeLabel = p.type;
+        if (p.id === '24k') typeLabel = "عيار 24";
+        else if (p.id === '22k') typeLabel = "عيار 22";
+        else if (p.id === '21k') typeLabel = "عيار 21";
+        else if (p.id === '18k') typeLabel = "عيار 18";
+        
+        return `${typeLabel}: ${p.price.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+      }).join('\n');
       shareText = `🌟 ${t('site_title')} 🌟\n\n${t('prices_in_country')} ${countryName}:\n${priceList}\n\n🕒 ${t('last_update')}: ${formattedDate} ${formattedTime}\n\n${t('footer_desc')}${hashtags}`;
     } else {
       shareText = `🌟 ${t('site_title')} 🌟\n\n${t('share_description')}\n\n${t('footer_desc')}${hashtags}`;
@@ -999,6 +1011,22 @@ function AppContent() {
         console.error("Failed to fetch exchange rates from Firestore", e);
       }
       setExchangeRates(ratesData);
+      
+      // Fetch general settings from Firestore
+      try {
+        const settingsDoc = await getDoc(doc(db, 'settings', 'general'));
+        if (settingsDoc.exists()) {
+          const dbData = settingsDoc.data();
+          setSettings((prev: any) => ({
+            ...prev,
+            ...dbData,
+            site_name: dbData.site_name || dbData.siteName || prev.site_name,
+            admin_email: dbData.admin_email || dbData.contactEmail || prev.admin_email
+          }));
+        }
+      } catch (e) {
+        console.error("Failed to fetch settings from Firestore", e);
+      }
 
       // Convert ounce to gram (1 ounce = 31.1035 grams)
       let pricePerGram = goldPriceOunce / 31.1035;
@@ -1085,7 +1113,7 @@ function AppContent() {
       clearInterval(interval);
       window.removeEventListener('price-updated', handlePriceUpdate);
     };
-  }, [currency, yemenRegion]);
+  }, [currency, yemenRegion, language]);
 
   const isAdminPage = location.pathname === '/admin';
 
@@ -1108,7 +1136,7 @@ function AppContent() {
             </Link>
             <div className="flex flex-col">
               <div className="flex items-center gap-3">
-                <h1 className="text-xl font-bold gold-text-gradient whitespace-nowrap">{t('site_title')}</h1>
+                <h1 className="text-xl font-bold gold-text-gradient whitespace-nowrap">{settings.site_name || t('site_title')}</h1>
                 <button 
                   onClick={() => navigate('/admin')} 
                   className="hidden sm:flex p-1.5 bg-white/5 rounded-lg border border-white/10 text-gray-400 hover:text-primary transition-all"
@@ -1225,11 +1253,11 @@ function AppContent() {
           </div>
         )}
         <Routes>
-          <Route path="/" element={<HomePage prices={prices} chartData={chartData} news={news} currency={currency} exchangeRates={exchangeRates} lastUpdate={lastUpdate} setCurrency={setCurrency} setLanguage={setLanguage} calcAmount={calcAmount} setCalcAmount={setCalcAmount} calcType={calcType} setCalcType={setCalcType} handleShare={handleShare} goldData={goldData} />} />
-          <Route path="/charts" element={<ChartsPage chartData={chartData} currency={currency} setCurrency={setCurrency} language={language} setLanguage={setLanguage} />} />
-          <Route path="/news" element={<NewsPage news={news} />} />
-          <Route path="/tips" element={<TipsPage />} />
-          <Route path="/about" element={<AboutPage />} />
+          <Route path="/" element={<HomePage prices={prices} chartData={chartData} news={news} currency={currency} exchangeRates={exchangeRates} lastUpdate={lastUpdate} setCurrency={setCurrency} setLanguage={setLanguage} calcAmount={calcAmount} setCalcAmount={setCalcAmount} calcType={calcType} setCalcType={setCalcType} handleShare={handleShare} goldData={goldData} settings={settings} />} />
+          <Route path="/charts" element={<ChartsPage chartData={chartData} currency={currency} setCurrency={setCurrency} language={language} setLanguage={setLanguage} settings={settings} />} />
+          <Route path="/news" element={<NewsPage news={news} settings={settings} />} />
+          <Route path="/tips" element={<TipsPage settings={settings} />} />
+          <Route path="/about" element={<AboutPage settings={settings} />} />
           <Route path="/admin" element={<Suspense fallback={<div className="min-h-screen bg-bg flex items-center justify-center"><RefreshCw className="w-10 h-10 text-primary animate-spin" /></div>}><AdminDashboard onBack={() => navigate('/')} /></Suspense>} />
         </Routes>
       </main>

@@ -386,10 +386,15 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     if (!newApiKey.trim()) return;
     setApiKeyLoading(true);
     try {
-      await axios.post('/api/admin/api-key', { apiKey: newApiKey.trim() });
+      const res = await axios.post('/api/admin/api-key', { apiKey: newApiKey.trim() });
       showSuccess("تم تحديث مفتاح الـ API بنجاح");
       setNewApiKey('');
-      fetchApiKeyInfo();
+      if (res.data.maskedKey) {
+        setApiKeyInfo((prev: any) => ({ ...prev, hasKey: true, isFromFirestore: true, maskedKey: res.data.maskedKey }));
+      } else {
+        fetchApiKeyInfo();
+      }
+      fetchData(); // Refresh all settings to sync state
     } catch (err) {
       setError("فشل تحديث مفتاح الـ API");
     } finally {
@@ -1202,8 +1207,16 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                       onClick={async () => {
                         setSaveLoading(true);
                         try {
-                          await setDoc(doc(db, 'settings', 'apiKeys'), apiKeys);
+                          await setDoc(doc(db, 'settings', 'apiKeys'), apiKeys, { merge: true });
+                          
+                          // If manual price mode is enabled, trigger a server update to apply it immediately
+                          if (apiKeys.manualPriceMode) {
+                            await axios.post('/api/admin/update-price');
+                          }
+                          
                           showSuccess('تم حفظ إعدادات السعر اليدوي بنجاح');
+                          window.dispatchEvent(new CustomEvent('price-updated'));
+                          fetchData();
                         } catch (err: any) {
                           handleFirestoreError(err, OperationType.UPDATE, 'settings/apiKeys');
                           setError('فشل حفظ الإعدادات');
@@ -1214,7 +1227,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                       disabled={saveLoading}
                       className="w-full py-2 bg-white/10 text-white rounded-lg text-xs font-bold hover:bg-white/20 transition-all"
                     >
-                      حفظ إعدادات السعر اليدوي
+                      حفظ وتطبيق إعدادات السعر اليدوي
                     </button>
                   </div>
 
@@ -1266,9 +1279,19 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
               </div>
 
               <div className="bg-card p-8 rounded-2xl border border-gold/10 shadow-lg space-y-6">
-                <h3 className="text-lg font-bold flex items-center gap-2 text-white">
-                  <Key size={20} className="text-primary" />
-                  إدارة مفتاح MetalpriceAPI
+                <h3 className="text-lg font-bold flex items-center justify-between gap-2 text-white">
+                  <div className="flex items-center gap-2">
+                    <Key size={20} className="text-primary" />
+                    إدارة مفتاح MetalpriceAPI
+                  </div>
+                  <button 
+                    onClick={fetchApiKeyInfo}
+                    disabled={apiKeyLoading}
+                    className="p-1 hover:bg-white/10 rounded-lg transition-all"
+                    title="تحديث معلومات المفتاح"
+                  >
+                    <RefreshCw size={16} className={apiKeyLoading ? 'animate-spin' : ''} />
+                  </button>
                 </h3>
                 <p className="text-gray-400 text-sm">
                   يمكنك إضافة مفتاح API جديد هنا. سيتم استخدامه بدلاً من المفتاح الافتراضي في النظام.

@@ -88,6 +88,22 @@ async function getApiKeyFromFirestore() {
 }
 
 async function savePriceToFirestore(pricePerOunce: number, updateType: 'manual' | 'auto', remainingApi: number, database: any) {
+  // 1. Fetch latest exchange rates from Firestore to ensure accuracy
+  let currentRates = { ...customExchangeRates };
+  try {
+    const ratesDoc = await getDoc(doc(database, 'settings', 'rates'));
+    if (ratesDoc.exists()) {
+      const data = ratesDoc.data();
+      if (data.YER_SANAA) currentRates.YER_SANAA = Number(data.YER_SANAA);
+      if (data.YER_ADEN) currentRates.YER_ADEN = Number(data.YER_ADEN);
+      // Update local cache too
+      customExchangeRates = { ...currentRates };
+      console.log("✅ تم تحديث أسعار الصرف من Firestore:", currentRates);
+    }
+  } catch (err) {
+    console.warn("⚠️ فشل في جلب أسعار الصرف من Firestore، سيتم استخدام القيم الافتراضية:", err);
+  }
+
   // 2. Get last price from Firestore to calculate difference
   const q = query(
     collection(database, 'price_history'),
@@ -108,8 +124,8 @@ async function savePriceToFirestore(pricePerOunce: number, updateType: 'manual' 
   const now = new Date().toISOString();
   const priceData = {
     price_usd: Number(pricePerOunce) || 0,
-    price_sanaa: Number(pricePerOunce * customExchangeRates.YER_SANAA) || 0,
-    price_aden: Number(pricePerOunce * customExchangeRates.YER_ADEN) || 0,
+    price_sanaa: Number(pricePerOunce * currentRates.YER_SANAA) || 0,
+    price_aden: Number(pricePerOunce * currentRates.YER_ADEN) || 0,
     updated_at: now,
     update_type: updateType,
     remaining_api: Number(remainingApi) || 0,
@@ -284,17 +300,20 @@ async function startServer() {
   // API Keys management
   app.get("/api/admin/api-key", async (req, res) => {
     try {
+      console.log("Fetching API key info...");
       const firestoreKey = await getApiKeyFromFirestore();
       const envKey = process.env.METALPRICE_API_KEY;
       
       const activeKey = firestoreKey || envKey;
+      console.log("Active key found:", !!activeKey, "From Firestore:", !!firestoreKey);
       
       res.json({
         hasKey: !!activeKey,
         isFromFirestore: !!firestoreKey,
         maskedKey: activeKey ? `${activeKey.substring(0, 4)}...${activeKey.substring(activeKey.length - 4)}` : null
       });
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Error in /api/admin/api-key:", error.message);
       res.status(500).json({ error: "Failed to fetch API key info" });
     }
   });
@@ -311,13 +330,16 @@ async function startServer() {
     }
 
     try {
+      console.log("Updating API key in Firestore (settings/apiKeys)...");
       await setDoc(doc(database, 'settings', 'apiKeys'), {
         METALPRICE_API_KEY: apiKey,
         updatedAt: serverTimestamp(),
         backend_secret: BACKEND_SECRET
       }, { merge: true });
       
-      res.json({ success: true, message: "API key updated successfully" });
+      console.log("API key updated successfully in Firestore");
+      const maskedKey = apiKey ? `${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}` : null;
+      res.json({ success: true, message: "API key updated successfully", maskedKey });
     } catch (error: any) {
       console.error("Error updating API key:", error.message);
       res.status(500).json({ error: "Failed to update API key", details: error.message });
@@ -439,13 +461,13 @@ async function startServer() {
 
     if (database) {
       try {
-        const testDoc = await getDoc(doc(database, 'settings', 'api_keys'));
+        const testDoc = await getDoc(doc(database, 'settings', 'apiKeys'));
         if (testDoc.exists()) {
           firestoreStatus = "Connected & Authorized";
           const data = testDoc.data();
           hasFirestoreApiKey = !!(data?.METALPRICE_API_KEY || data?.metalpriceapi_key);
         } else {
-          firestoreStatus = "Connected (api_keys document not found)";
+          firestoreStatus = "Connected (apiKeys document not found)";
         }
       } catch (e: any) {
         firestoreStatus = `Error: ${e.message}`;
