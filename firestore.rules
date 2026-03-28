@@ -59,23 +59,27 @@ service cloud.firestore {
 
     // Admin only data
     match /settings/{docId} {
-      allow read: if docId == 'stats' || docId == 'general' || docId == 'exchangeRates' || docId == 'apiKeys' || docId == 'api_keys' || isAdmin() || isBackendRead();
-      allow write: if isAdmin() || isBackend() || (docId == 'stats' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['total', 'today', 'week', 'month']));
+      allow read: if docId == 'general' || docId == 'exchangeRates' || docId == 'stats' || isAdmin() || isBackendRead();
+      allow write: if isAdmin() || isBackend();
     }
 
     match /visitors/{docId} {
       allow read: if isAdmin();
-      allow write: if true; // Allow logging visits
+      allow create: if hasOnlyAllowedFields(['ip', 'user_agent', 'timestamp', 'city', 'country', 'region', 'backend_secret']) && 
+                      request.resource.data.timestamp is string;
+      allow update, delete: if isAdmin();
     }
 
     match /notifications/{docId} {
-      allow read: if isAdmin();
+      allow read: if true; // Allow public to see sent alerts if needed
       allow write: if isAdmin();
     }
 
     match /subscribers/{docId} {
       allow read: if isAdmin();
-      allow create: if true; // Allow anyone to subscribe
+      allow create: if hasOnlyAllowedFields(['email', 'subscribedAt', 'status']) && 
+                      request.resource.data.email is string && 
+                      request.resource.data.status == 'active';
       allow update, delete: if isAdmin();
     }
 

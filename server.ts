@@ -54,19 +54,13 @@ if (!METALPRICE_API_KEY) {
   console.warn("METALPRICE_API_KEY is missing in environment variables.");
 }
 
-let customExchangeRates = {
+// Default exchange rates (fallback)
+const DEFAULT_EXCHANGE_RATES = {
   YER_SANAA: 530,
   YER_ADEN: 1650
 };
 
-// Cache for gold price (now reading from Firestore)
-let goldPriceCache = {
-  price: 0,
-  timestamp: 0,
-  isFallback: false,
-  change_value: 0,
-  change_type: 'stable'
-};
+let customExchangeRates = { ...DEFAULT_EXCHANGE_RATES };
 
 async function getApiKeyFromFirestore() {
   const database = getDb();
@@ -77,8 +71,6 @@ async function getApiKeyFromFirestore() {
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
       const data = docSnap.data();
-      // FORCE COMMIT: Added support for lowercase api key field from Firebase
-      // This ensures that if the user typed 'metalpriceapi_key' instead of 'METALPRICE_API_KEY', it still works.
       return data?.METALPRICE_API_KEY || data?.metalpriceapi_key || null;
     }
   } catch (error: any) {
@@ -87,22 +79,27 @@ async function getApiKeyFromFirestore() {
   return null;
 }
 
-async function savePriceToFirestore(pricePerOunce: number, updateType: 'manual' | 'auto', remainingApi: number, database: any) {
-  // 1. Fetch latest exchange rates from Firestore to ensure accuracy
-  let currentRates = { ...customExchangeRates };
+async function getExchangeRatesFromFirestore(database: any) {
   try {
-    const ratesDoc = await getDoc(doc(database, 'settings', 'rates'));
+    const ratesDoc = await getDoc(doc(database, 'settings', 'exchangeRates'));
     if (ratesDoc.exists()) {
       const data = ratesDoc.data();
-      if (data.YER_SANAA) currentRates.YER_SANAA = Number(data.YER_SANAA);
-      if (data.YER_ADEN) currentRates.YER_ADEN = Number(data.YER_ADEN);
-      // Update local cache too
-      customExchangeRates = { ...currentRates };
-      console.log("✅ تم تحديث أسعار الصرف من Firestore:", currentRates);
+      const rates = {
+        YER_SANAA: Number(data.YER_SANAA) || DEFAULT_EXCHANGE_RATES.YER_SANAA,
+        YER_ADEN: Number(data.YER_ADEN) || DEFAULT_EXCHANGE_RATES.YER_ADEN
+      };
+      customExchangeRates = { ...rates };
+      return rates;
     }
   } catch (err) {
-    console.warn("⚠️ فشل في جلب أسعار الصرف من Firestore، سيتم استخدام القيم الافتراضية:", err);
+    console.warn("⚠️ فشل في جلب أسعار الصرف من Firestore، سيتم استخدام القيم الحالية:", err);
   }
+  return customExchangeRates;
+}
+
+async function savePriceToFirestore(pricePerOunce: number, updateType: 'manual' | 'auto', remainingApi: number, database: any) {
+  // 1. Fetch latest exchange rates from Firestore to ensure accuracy
+  const currentRates = await getExchangeRatesFromFirestore(database);
 
   // 2. Get last price from Firestore to calculate difference
   const q = query(
@@ -160,14 +157,26 @@ async function savePriceToFirestore(pricePerOunce: number, updateType: 'manual' 
     console.error("❌ خطأ في تحديث المخزن (Cache):", error.message);
   }
 
-  // Update in-memory cache
-  goldPriceCache = {
-    price: pricePerOunce,
-    timestamp: Date.now(),
-    isFallback: false,
-    change_value: Math.abs(changeValue),
-    change_type: changeType
-  };
+  // 5. Update global stats for update counts
+  try {
+    const statsRef = doc(database, 'settings', 'stats');
+    const statsSnap = await getDoc(statsRef);
+    let statsData = { auto_update_count: 0, manual_update_count: 0 };
+    if (statsSnap.exists()) {
+      statsData = { ...statsData, ...statsSnap.data() };
+    }
+    
+    if (updateType === 'auto') {
+      statsData.auto_update_count = (statsData.auto_update_count || 0) + 1;
+    } else {
+      statsData.manual_update_count = (statsData.manual_update_count || 0) + 1;
+    }
+    
+    await setDoc(statsRef, statsData, { merge: true });
+    console.log(`✅ تم تحديث إحصائيات التحديث (${updateType}):`, statsData);
+  } catch (error: any) {
+    console.error("❌ خطأ في تحديث إحصائيات التحديث:", error.message);
+  }
 
   return priceData;
 }
@@ -230,16 +239,6 @@ async function fetchGoldPriceFromAPI(updateType: 'manual' | 'auto' = 'manual') {
           // Check if last_update exists and is within 12 hours
           if (lastUpdate && (Date.now() - lastUpdate < TWELVE_HOURS_MS)) {
             console.log("✅ السعر قادم من المخزن (Cache) في Firestore - لم تمر 12 ساعة");
-            
-            // Update in-memory cache
-            goldPriceCache = {
-              price: cacheData.price_usd,
-              timestamp: cacheData.last_update,
-              isFallback: false,
-              change_value: cacheData.change_value || 0,
-              change_type: cacheData.change_type || 'stable'
-            };
-            
             return cacheData; // Return cached data directly
           }
         }
@@ -310,7 +309,7 @@ async function startServer() {
       res.json({
         hasKey: !!activeKey,
         isFromFirestore: !!firestoreKey,
-        maskedKey: activeKey ? `${activeKey.substring(0, 4)}...${activeKey.substring(activeKey.length - 4)}` : null
+        maskedKey: activeKey ? `${activeKey.substring(0, 4)} •••• •••• ${activeKey.substring(activeKey.length - 4)}` : null
       });
     } catch (error: any) {
       console.error("Error in /api/admin/api-key:", error.message);
@@ -338,7 +337,7 @@ async function startServer() {
       }, { merge: true });
       
       console.log("API key updated successfully in Firestore");
-      const maskedKey = apiKey ? `${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}` : null;
+      const maskedKey = apiKey ? `${apiKey.substring(0, 4)} •••• •••• ${apiKey.substring(apiKey.length - 4)}` : null;
       res.json({ success: true, message: "API key updated successfully", maskedKey });
     } catch (error: any) {
       console.error("Error updating API key:", error.message);
@@ -405,9 +404,28 @@ async function startServer() {
         return res.status(500).json({ error: "Firebase not initialized" });
       }
 
-      // Get latest from Firestore
-      console.log("Fetching latest gold price from Firestore...");
+      // Get latest from Firestore Cache first (more efficient than history query)
+      console.log("Fetching latest gold price from Firestore cache (prices/gold_rates)...");
+      const cacheRef = doc(database, 'prices', 'gold_rates');
+      const cacheSnap = await getDoc(cacheRef);
       
+      if (cacheSnap.exists()) {
+        const latest = cacheSnap.data();
+        console.log("Latest price found in cache:", latest.price_usd);
+        return res.json({
+          price: latest.price_usd,
+          timestamp: new Date(latest.updated_at).getTime(),
+          isFallback: false,
+          change_value: latest.change_value,
+          change_type: latest.change_type,
+          price_sanaa: latest.price_sanaa,
+          price_aden: latest.price_aden,
+          remaining_api: latest.remaining_api
+        });
+      }
+
+      // Fallback to history if cache is empty
+      console.log("Cache empty, falling back to price_history...");
       const q = query(
         collection(database, 'price_history'),
         orderBy('updated_at', 'desc'),
@@ -417,7 +435,7 @@ async function startServer() {
       
       if (!querySnapshot.empty) {
         const latest = querySnapshot.docs[0].data();
-        console.log("Latest price found:", latest.price_usd);
+        console.log("Latest price found in history:", latest.price_usd);
         return res.json({
           price: latest.price_usd,
           timestamp: new Date(latest.updated_at).getTime(),
@@ -425,7 +443,8 @@ async function startServer() {
           change_value: latest.change_value,
           change_type: latest.change_type,
           price_sanaa: latest.price_sanaa,
-          price_aden: latest.price_aden
+          price_aden: latest.price_aden,
+          remaining_api: latest.remaining_api
         });
       }
 

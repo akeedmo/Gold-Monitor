@@ -106,9 +106,36 @@
       "type": "object",
       "properties": {
         "METALPRICE_API_KEY": { "type": "string" },
+        "manualPriceMode": { "type": "boolean" },
+        "manualPrice": { "type": "number" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["METALPRICE_API_KEY"]
+    },
+    "GeneralSetting": {
+      "title": "GeneralSetting",
+      "description": "General site settings",
+      "type": "object",
+      "properties": {
+        "site_name": { "type": "string" },
+        "admin_email": { "type": "string", "format": "email" },
+        "primary_color": { "type": "string" },
+        "secondary_color": { "type": "string" },
+        "monetization_link": { "type": "string" }
+      }
+    },
+    "StatsSetting": {
+      "title": "StatsSetting",
+      "description": "Site usage statistics",
+      "type": "object",
+      "properties": {
+        "total": { "type": "integer" },
+        "today": { "type": "integer" },
+        "week": { "type": "integer" },
+        "month": { "type": "integer" },
+        "auto_update_count": { "type": "integer" },
+        "manual_update_count": { "type": "integer" }
+      }
     }
   },
   "firestore": {
@@ -128,13 +155,21 @@
       "schema": "News",
       "description": "Market news articles"
     },
-    "/visits": {
+    "/visitors": {
       "schema": "Visit",
       "description": "Traffic analytics"
     },
-    "/settings": {
-      "schema": "Setting",
-      "description": "App configuration"
+    "/settings/general": {
+      "schema": "GeneralSetting",
+      "description": "General site configuration"
+    },
+    "/settings/stats": {
+      "schema": "StatsSetting",
+      "description": "Usage statistics"
+    },
+    "/settings/exchangeRates": {
+      "schema": "object",
+      "description": "Map of currency codes to rates"
     },
     "/settings/apiKeys": {
       "schema": "ApiKeySetting",

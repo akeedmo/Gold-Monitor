@@ -1036,15 +1036,14 @@ function AppContent() {
 
       // Apply currency conversion
       if (currency !== 'USD') {
-        let rate = 1;
         if (currency === 'YER') {
-          rate = yemenRegion === 'SANAA' ? (Number(ratesData.YER_SANAA) || 530) : (Number(ratesData.YER_ADEN) || 1650);
+          // Use pre-calculated prices from API for Yemen regions to ensure consistency
+          const yerPrice = yemenRegion === 'SANAA' ? (goldResponse.data.price_sanaa || (goldPriceOunce * (Number(ratesData.YER_SANAA) || 530))) : (goldResponse.data.price_aden || (goldPriceOunce * (Number(ratesData.YER_ADEN) || 1650)));
+          pricePerGram = yerPrice / 31.1035;
         } else {
-          // For other currencies, use the rate from Firestore
-          rate = Number(ratesData[currency]) || 1;
+          let rate = Number(ratesData[currency]) || 1;
           
           // If rate is 1 and it's not USD, it might be missing in Firestore
-          // We can provide some default common rates just in case
           if (rate === 1) {
             const defaults: any = {
               'SAR': 3.75,
@@ -1062,8 +1061,8 @@ function AppContent() {
             };
             rate = defaults[currency] || 1;
           }
+          pricePerGram = pricePerGram * rate;
         }
-        pricePerGram = pricePerGram * rate;
       }
 
       const rawChangeVal = goldResponse.data.change_value || 0;
@@ -1074,6 +1073,7 @@ function AppContent() {
         ? (changeVal / (goldResponse.data.price - changeVal)) * 100 
         : 0;
 
+      // Use pre-calculated prices from API if available for consistency
       const p24 = pricePerGram;
       const p22 = p24 * 22 / 24;
       const p21 = p24 * 21 / 24;

@@ -6,10 +6,10 @@ import {
   TrendingUp, 
   TrendingDown,
   History,
-  ArrowLeft, 
+  ArrowLeft,
   ArrowRight,
-  Lock,
   Eye,
+  EyeOff,
   Clock,
   LogOut,
   ChevronRight,
@@ -27,6 +27,7 @@ import {
   RefreshCw,
   Globe,
   Key,
+  Lock,
   AlertTriangle,
   HelpCircle,
   ExternalLink,
@@ -57,6 +58,9 @@ interface Stats {
   history: { date: string; count: number }[];
   latestPrice: any;
   totalNews: number;
+  auto_update_count?: number;
+  manual_update_count?: number;
+  remaining_api?: number;
 }
 
 interface ApiKey {
@@ -82,7 +86,9 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     manualPrice: 2150
   });
   const [apiKeyInfo, setApiKeyInfo] = useState<any>({ hasKey: false, isFromFirestore: false, maskedKey: null });
+  const [dbStatus, setDbStatus] = useState<any>(null);
   const [newApiKey, setNewApiKey] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyLoading, setApiKeyLoading] = useState(false);
   const [visitors, setVisitors] = useState<any[]>([]);
   const [news, setNews] = useState<any[]>([]);
@@ -228,7 +234,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   const fetchData = async () => {
     if (!token) return;
     try {
-      let realStats = { total: 0, today: 0, week: 0, month: 0, history: [], latestPrice: { price: 0, timestamp: '' }, totalNews: 0 };
+      let realStats: Stats = { total: 0, today: 0, week: 0, month: 0, history: [], latestPrice: { price: 0, timestamp: '' }, totalNews: 0 };
       try {
         const statsDoc = await getDoc(doc(db, 'settings', 'stats'));
         if (statsDoc.exists()) {
@@ -246,6 +252,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
             price: priceData.price_usd || 0,
             timestamp: priceData.updated_at || new Date().toISOString()
           };
+          realStats.remaining_api = priceData.remaining_api;
         }
       } catch (e) {
         console.error("Failed to fetch latest price:", e);
@@ -330,8 +337,21 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
         handleFirestoreError(e, OperationType.GET, 'settings/exchangeRates');
       }
 
+      // Fetch API key info from server (masked)
+      try {
+        const response = await axios.get('/api/admin/api-key');
+        if (response.data.hasKey) {
+          setApiKeyInfo(response.data);
+        }
+      } catch (e) {
+        console.error("Failed to fetch API key info from server:", e);
+      }
+
       let apiKeysData: any = { manualPriceMode: false, manualPrice: 2150 };
       try {
+        // We still need manualPriceMode and manualPrice from Firestore settings/apiKeys
+        // but we should probably rename this document or split it if we want to hide the key.
+        // For now, we'll just read it but the rules will be stricter.
         const keysDoc = await getDoc(doc(db, 'settings', 'apiKeys'));
         if (keysDoc.exists()) {
           const data = keysDoc.data();
@@ -342,7 +362,9 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
           };
         }
       } catch (e) {
-        handleFirestoreError(e, OperationType.GET, 'settings/apiKeys');
+        // If this fails, it might be due to permissions, which is expected for non-admins
+        // but AdminDashboard is only for admins.
+        console.warn("Could not read settings/apiKeys directly (expected if rules are strict):", e);
       }
 
       setStats(realStats);
@@ -377,6 +399,9 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     try {
       const res = await axios.get('/api/admin/api-key');
       setApiKeyInfo(res.data);
+      
+      const statusRes = await axios.get('/api/status');
+      setDbStatus(statusRes.data);
     } catch (err) {
       console.error("Failed to fetch API key info", err);
     }
@@ -638,14 +663,24 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
       <main className="flex-1 p-4 md:p-8 overflow-x-hidden">
         <div className="max-w-6xl mx-auto space-y-8">
           <div className="flex justify-between items-center">
-            <h1 className="text-3xl font-bold gold-text-gradient">
-              {activeTab === 'overview' && t('overview')}
-              {activeTab === 'notifications' && t('manage_notifications')}
-              {activeTab === 'news' && t('manage_news')}
-              {activeTab === 'rates' && t('manage_rates')}
-              {activeTab === 'settings' && t('site_settings')}
-              {activeTab === 'monetization' && t('monetization')}
-            </h1>
+            <div className="flex flex-col">
+              <h1 className="text-3xl font-bold gold-text-gradient">
+                {activeTab === 'overview' && t('overview')}
+                {activeTab === 'notifications' && t('manage_notifications')}
+                {activeTab === 'news' && t('manage_news')}
+                {activeTab === 'rates' && t('manage_rates')}
+                {activeTab === 'settings' && t('site_settings')}
+                {activeTab === 'monetization' && t('monetization')}
+              </h1>
+              {dbStatus && activeTab === 'overview' && (
+                <div className="flex items-center gap-2 mt-1">
+                  <div className={`w-2 h-2 rounded-full ${dbStatus.firestoreStatus.includes('Connected') ? 'bg-green-500' : 'bg-red-500'}`} />
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">
+                    {dbStatus.firestoreStatus}
+                  </span>
+                </div>
+              )}
+            </div>
             <div className="flex items-center gap-4">
               {successMessage && (
                 <div className="bg-green-500/20 text-green-400 px-4 py-2 rounded-xl text-sm font-bold border border-green-500/30 animate-in fade-in slide-in-from-right-4 duration-300">
@@ -1275,6 +1310,23 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                     <RefreshCw className={saveLoading ? "animate-spin" : ""} size={18} />
                     تحديث الأسعار الآن (MetalpriceAPI)
                   </button>
+
+                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+                    <div className="bg-white/5 border border-white/10 p-4 rounded-xl text-center">
+                      <p className="text-[10px] text-gray-400 mb-1">تحديثات تلقائية</p>
+                      <p className="text-xl font-bold text-white">{stats?.auto_update_count || 0}</p>
+                    </div>
+                    <div className="bg-white/5 border border-white/10 p-4 rounded-xl text-center">
+                      <p className="text-[10px] text-gray-400 mb-1">تحديثات يدوية</p>
+                      <p className="text-xl font-bold text-white">{stats?.manual_update_count || 0}</p>
+                    </div>
+                    <div className="bg-white/5 border border-white/10 p-4 rounded-xl text-center col-span-2 lg:col-span-1">
+                      <p className="text-[10px] text-gray-400 mb-1">الطلبات المتبقية (API)</p>
+                      <p className={`text-xl font-bold ${Number(stats?.remaining_api) < 50 ? 'text-red-400' : 'text-green-400'}`}>
+                        {stats?.remaining_api !== undefined ? stats.remaining_api : '---'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1313,20 +1365,29 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                   <div className="space-y-4">
                     <label className="text-xs font-bold text-gray-500 block">إضافة مفتاح جديد:</label>
                     <div className="space-y-4">
-                      <input 
-                        type="password" 
-                        value={newApiKey}
-                        onChange={(e) => setNewApiKey(e.target.value)}
-                        placeholder="أدخل مفتاح API الجديد هنا..."
-                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-primary"
-                      />
+                      <div className="relative flex items-center">
+                        <input 
+                          type={showApiKey ? "text" : "password"} 
+                          value={newApiKey}
+                          onChange={(e) => setNewApiKey(e.target.value)}
+                          placeholder="أدخل مفتاح API الجديد هنا..."
+                          className={`w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-primary ${isRTL ? 'pl-12' : 'pr-12'}`}
+                        />
+                        <button 
+                          type="button"
+                          onClick={() => setShowApiKey(!showApiKey)}
+                          className={`absolute inset-y-0 ${isRTL ? 'left-0' : 'right-0'} px-3 flex items-center text-gray-500 hover:text-primary transition-colors`}
+                        >
+                          {showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
                       <button 
                         onClick={handleUpdateApiKey}
                         disabled={apiKeyLoading || !newApiKey.trim()}
-                        className="w-full py-4 bg-primary text-black rounded-xl font-bold hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg"
+                        className="w-full py-4 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg"
                       >
-                        {apiKeyLoading ? <RefreshCw className="animate-spin" size={18} /> : <Save size={18} />}
                         تحديث مفتاح الـ API
+                        {apiKeyLoading ? <RefreshCw className="animate-spin" size={18} /> : <Save size={18} />}
                       </button>
                     </div>
                   </div>
