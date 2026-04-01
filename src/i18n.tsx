@@ -12,9 +12,9 @@ interface Translations {
 
 export const translations: Translations = {
   "prices_in_country": {
-    ar: "أسعار الذهب في",
-    en: "Gold Prices in",
-    tr: "Altın Fiyatları"
+    ar: "أسعار الذهب اليوم في",
+    en: "Gold Prices Today in",
+    tr: "Bugünkü Altın Fiyatları"
   },
   "USD": { ar: 'الدولار الأمريكي', en: 'US Dollar', tr: 'ABD Doları' },
   "EUR": { ar: 'اليورو', en: 'Euro', tr: 'Euro' },
