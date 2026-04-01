@@ -10,8 +10,6 @@ import {
   Menu,
   RefreshCw,
   Calculator,
-  Newspaper,
-  BarChart2,
   Info,
   Lightbulb,
   ArrowLeft,
@@ -27,13 +25,13 @@ import {
 import axios from 'axios';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { doc, getDoc, setDoc, collection, addDoc, increment } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, addDoc, increment, getDocs, query, orderBy, limit, serverTimestamp } from 'firebase/firestore';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Helmet, HelmetProvider } from 'react-helmet-async';
 import { useTranslation } from './i18n';
+import { METALPRICE_API_KEY } from './config';
 
 const AdminDashboard = lazy(() => import('./AdminDashboard'));
-const ChartComponent = lazy(() => import('./ChartComponent'));
 
 // --- Types ---
 interface GoldPrice {
@@ -50,12 +48,14 @@ interface ChartData {
 }
 
 interface NewsItem {
-  id: number;
+  id: string;
   title: string;
-  link: string;
+  link?: string;
   pubDate: string;
   contentSnippet: string;
   source: string;
+  likes?: number;
+  views?: number;
 }
 
 // --- Components ---
@@ -160,7 +160,7 @@ const CurrencyLanguageSelector = ({ currency, setCurrency, language, setLanguage
   );
 };
 
-const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate, setCurrency, setLanguage, calcAmount, setCalcAmount, calcType, setCalcType, handleShare, goldData, settings }: any) => {
+const HomePage = ({ prices, currency, exchangeRates, lastUpdate, setCurrency, setLanguage, calcAmount, setCalcAmount, calcType, setCalcType, handleShare, goldData, settings }: any) => {
   const { t, language } = useTranslation();
   const locale = language === 'ar' ? 'ar-SA' : language === 'tr' ? 'tr-TR' : 'en-US';
   const [email, setEmail] = useState('');
@@ -191,23 +191,17 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
   };
 
   const handleGoogleSubscribe = async () => {
-    if (subLoading) return;
-    
     try {
       const provider = new GoogleAuthProvider();
       // Call signInWithPopup immediately without any state changes before it
       // to preserve the user gesture and prevent popup blocking.
-      setSubLoading(true);
       const result = await signInWithPopup(auth, provider);
       
+      setSubLoading(true);
       if (result.user.email) {
         await handleSubscribe(null, result.user.email);
       }
     } catch (err: any) {
-      if (err.code === 'auth/cancelled-popup-request') {
-        // This happens if multiple popups are requested, we can ignore it
-        return;
-      }
       console.error("Google Sign-in error code:", err.code);
       console.error("Google Sign-in error message:", err.message);
       if (err.code === 'auth/popup-closed-by-user') {
@@ -395,239 +389,6 @@ const HomePage = ({ prices, chartData, news, currency, exchangeRates, lastUpdate
   );
 };
 
-const ChartsPage = ({ chartData, currency, setCurrency, language, setLanguage, settings }: any) => {
-  const { t } = useTranslation();
-  const locale = language === 'ar' ? 'ar-SA' : language === 'tr' ? 'tr-TR' : 'en-US';
-  const [timeRange, setTimeRange] = useState('D1');
-  const [isChanging, setIsChanging] = useState(false);
-  const [selectedPoint, setSelectedPoint] = useState<any>(null);
-
-  const handleRangeChange = (range: string) => {
-    setIsChanging(true);
-    setTimeRange(range);
-    setTimeout(() => setIsChanging(false), 800);
-  };
-
-  const formatXAxis = (tickItem: any) => {
-    const date = new Date(tickItem);
-    if (timeRange === 'H1' || timeRange === 'H2' || timeRange === 'D1') {
-      return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
-    }
-    return date.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
-  };
-
-  // Filter data based on range (simulated)
-  const filteredData = React.useMemo(() => {
-    if (timeRange === 'H1') return chartData.slice(-12);
-    if (timeRange === 'H2') return chartData.slice(-24);
-    if (timeRange === 'D1') return chartData.slice(-48);
-    return chartData;
-  }, [chartData, timeRange]);
-
-  return (
-    <div className="space-y-8">
-      <Helmet>
-        <title>{t('charts_analysis')} | {settings.site_name || t('site_title')}</title>
-        <meta name="description" content={t('meta_desc_charts')} />
-        <meta property="og:title" content={t('charts_analysis')} />
-        <meta property="og:description" content={t('meta_desc_charts')} />
-        <meta property="og:image" content="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=1200&h=630" />
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content={t('charts_analysis')} />
-        <meta name="twitter:description" content={t('meta_desc_charts')} />
-        <meta name="twitter:image" content="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=1200&h=630" />
-      </Helmet>
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <CurrencyLanguageSelector currency={currency} setCurrency={setCurrency} language={language} setLanguage={setLanguage} />
-        </div>
-        <h2 className="text-3xl font-bold gold-text-gradient">{t('charts_analysis')}</h2>
-        <div className="flex bg-[#161a1e] p-1 rounded-lg border border-white/5">
-          {['H1', 'H2', 'D1', 'M1', 'Y1'].map((range) => (
-            <button
-              key={range}
-              onClick={() => handleRangeChange(range)}
-              className={`px-3 py-1 rounded text-[11px] font-bold transition-all ${
-                timeRange === range ? 'bg-[#2b3139] text-primary' : 'text-gray-500 hover:text-white'
-              }`}
-            >
-              {range}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="bg-[#0b0e11] rounded-xl p-4 border border-white/5 card-shadow relative overflow-hidden group">
-        <div className="flex justify-between items-center mb-4 text-[10px] font-mono text-gray-500">
-          <div className="flex gap-4">
-            <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-primary" /> GOLD/USD</span>
-            <span>MA(5): <span className="text-yellow-500">2,154.20</span></span>
-            <span>MA(10): <span className="text-purple-500">2,148.15</span></span>
-          </div>
-          <div className="flex gap-2">
-            <span className="text-up">H: 2,165.40</span>
-            <span className="text-down">L: 2,140.10</span>
-          </div>
-        </div>
-
-        {isChanging && (
-          <div className="absolute inset-0 bg-[#0b0e11]/80 backdrop-blur-sm z-20 flex items-center justify-center transition-opacity duration-300">
-            <RefreshCw className="w-8 h-8 text-primary animate-spin" />
-          </div>
-        )}
-
-        <div className="h-[500px] w-full">
-          <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-primary"><RefreshCw className="animate-spin w-8 h-8" /></div>}>
-            <ChartComponent 
-              filteredData={filteredData} 
-              formatXAxis={formatXAxis} 
-              locale={locale} 
-              currency={currency} 
-              t={t} 
-              setSelectedPoint={setSelectedPoint} 
-            />
-          </Suspense>
-        </div>
-        
-        {selectedPoint && (
-          <div className="mt-6 p-4 bg-white/5 rounded-2xl border border-gold/20 flex justify-between items-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="flex flex-col">
-              <span className="text-[10px] text-gray-500 font-bold uppercase">{t('selected_price')}</span>
-              <span className="text-xl font-bold text-primary">{selectedPoint.value.toLocaleString(locale)} {currency}</span>
-            </div>
-            <div className="text-right">
-              <span className="text-[10px] text-gray-500 font-bold uppercase">{t('date_and_time')}</span>
-              <p className="text-sm font-bold text-white">
-                {new Date(selectedPoint.timestamp).toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' })}
-              </p>
-              <p className="text-xs text-gray-400">
-                {new Date(selectedPoint.timestamp).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
-              </p>
-            </div>
-          </div>
-        )}
-
-        <div className="mt-6 flex justify-between items-center text-[10px] text-gray-500 font-bold uppercase tracking-widest">
-          <div className="flex items-center gap-4">
-            <span>{t('live_from_exchange')}</span>
-            <span className="text-primary/40">|</span>
-            <span>{t('range')} {timeRange}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-up animate-pulse" />
-            <span>{t('updated_now')}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const NewsPage = ({ news, settings }: any) => {
-  const { t, language } = useTranslation();
-  const locale = language === 'ar' ? 'ar-SA' : language === 'tr' ? 'tr-TR' : 'en-US';
-  const [newsList, setNewsList] = useState(news);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-
-  useEffect(() => {
-    setNewsList(news);
-  }, [news]);
-
-  const handleLike = async (id: number) => {
-    try {
-      // Mock API call for Firebase Hosting
-      setNewsList(newsList.map((item: any) => 
-        item.id === id ? { ...item, likes: (item.likes || 0) + 1 } : item
-      ));
-    } catch (err) {
-      console.error("Like error:", err);
-    }
-  };
-
-  const handleView = async (id: number) => {
-    try {
-      // Mock API call for Firebase Hosting
-      setNewsList(newsList.map((item: any) => 
-        item.id === id ? { ...item, views: (item.views || 0) + 1 } : item
-      ));
-    } catch (err) {
-      console.error("View error:", err);
-    }
-  };
-
-  return (
-    <div className="space-y-8">
-      <Helmet>
-        <title>{t('gold_news_markets')} | {settings.site_name || t('site_title')}</title>
-        <meta name="description" content={t('meta_desc_news')} />
-        <meta property="og:title" content={t('gold_news_markets')} />
-        <meta property="og:description" content={t('meta_desc_news')} />
-        <meta property="og:image" content="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=1200&h=630" />
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content={t('gold_news_markets')} />
-        <meta name="twitter:description" content={t('meta_desc_news')} />
-        <meta name="twitter:image" content="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=1200&h=630" />
-      </Helmet>
-      <h2 className="text-3xl font-bold gold-text-gradient">{t('gold_news_markets')}</h2>
-      <AdPlaceholder type="header" settings={settings} />
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {newsList.map((item: any) => (
-          <div key={item.id} className="bg-card p-6 rounded-3xl border border-gold/10 card-shadow hover:border-primary/30 transition-all group flex flex-col">
-            <div className="flex justify-between items-start mb-4">
-              <span className="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full">{item.source}</span>
-              <span className="text-xs text-gray-500">{new Date(item.pubDate).toLocaleDateString(locale)}</span>
-            </div>
-            <h4 className="text-lg font-bold mb-3 group-hover:text-primary transition-colors">{item.title}</h4>
-            <div className={`text-gray-500 text-sm leading-relaxed mb-4 ${expandedId === item.id ? '' : 'line-clamp-3'}`}>
-              {item.contentSnippet}
-            </div>
-            
-            <div className="mt-auto space-y-4">
-              <div className="flex items-center justify-between border-t border-white/5 pt-4">
-                <div className="flex items-center gap-4">
-                  <button 
-                    onClick={() => handleLike(item.id)}
-                    className="flex items-center gap-1 text-gray-400 hover:text-red-500 transition-colors"
-                  >
-                    <TrendingUp size={14} className={item.likes > 0 ? "text-red-500" : ""} />
-                    <span className="text-xs font-bold">{item.likes || 0}</span>
-                  </button>
-                  <div className="flex items-center gap-1 text-gray-400">
-                    <Eye size={14} />
-                    <span className="text-xs font-bold">{item.views || 0}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {item.contentSnippet && item.contentSnippet.length > 150 && (
-                    <button 
-                      onClick={() => {
-                        if (expandedId !== item.id) handleView(item.id);
-                        setExpandedId(expandedId === item.id ? null : item.id);
-                      }}
-                      className="text-primary text-xs font-bold hover:underline"
-                    >
-                      {expandedId === item.id ? t('close') : t('read_more')}
-                    </button>
-                  )}
-                  <a 
-                    href={item.link} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    onClick={() => handleView(item.id)}
-                    className="p-1.5 bg-white/5 rounded-lg text-gray-400 hover:text-primary transition-colors"
-                    title={t('original_source')}
-                  >
-                    <Globe size={14} />
-                  </a>
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-      <AdPlaceholder type="content" settings={settings} />
-    </div>
-  );
-};
 
 const TipsPage = ({ settings }: any) => {
   const { t } = useTranslation();
@@ -769,8 +530,6 @@ const BottomNav = ({ onRefresh }: { onRefresh: () => void }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const navItems = [
     { id: '/', label: t('nav_home'), icon: Layout, path: '/' },
-    { id: '/charts', label: t('nav_charts_short'), icon: BarChart2, path: '/charts' },
-    { id: '/news', label: t('nav_news'), icon: Newspaper, path: '/news' },
     { id: '/tips', label: t('nav_tips'), icon: Lightbulb, path: '/tips' },
   ];
 
@@ -834,8 +593,6 @@ function AppContent() {
     { id: '21k', type: t('gold_21k'), price: 0, change: 0, changePercent: 0 },
     { id: '18k', type: t('gold_18k'), price: 0, change: 0, changePercent: 0 },
   ]);
-  const [chartData, setChartData] = useState<ChartData[]>([]);
-  const [news, setNews] = useState<NewsItem[]>([]);
   const [currency, setCurrency] = useState(localStorage.getItem('selectedCurrency') || 'USD');
   const [yemenRegion, setYemenRegion] = useState(localStorage.getItem('yemenRegion') || 'ADEN');
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({ USD: 1 });
@@ -998,13 +755,33 @@ function AppContent() {
   const fetchData = async (force = false) => {
     if (isFirstLoad) setLoading(true);
     try {
-      // Fetch gold price from our server-side proxy (which handles caching and rate limits)
-      // The server returns the price of 1 ounce of gold in USD.
-      const timestamp = new Date().getTime();
-      const goldResponse = await axios.get(`/api/gold-price?t=${timestamp}${force ? '&force=true' : ''}`, { timeout: 15000 });
-      const { price } = goldResponse.data;
-      setGoldData(goldResponse.data);
-      const goldPriceOunce = Number(price) || 2150;
+      // Fetch gold price from Firestore cache
+      let goldData = null;
+      try {
+        const docRef = doc(db, 'prices', 'gold_rates');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          goldData = docSnap.data();
+        }
+      } catch (e) {
+        console.error("Failed to fetch gold price from Firestore", e);
+      }
+
+      if (!goldData) {
+        // Fallback data if Firestore fails
+        goldData = {
+          price: 2150,
+          price_sanaa: 2150 * 530 / 31.1035,
+          price_aden: 2150 * 1650 / 31.1035,
+          change_value: 0,
+          change_type: 'stable',
+          updated_at: new Date().toISOString()
+        };
+      }
+      
+      const price = goldData.price_usd || goldData.price || 2150;
+      setGoldData(goldData);
+      const goldPriceOunce = Number(price);
 
       // Fetch exchange rates from Firestore
       let ratesData = { YER_SANAA: 530, YER_ADEN: 1650 };
@@ -1044,7 +821,7 @@ function AppContent() {
       if (currency !== 'USD') {
         if (currency === 'YER') {
           // Use pre-calculated prices from API for Yemen regions to ensure consistency
-          const yerPrice = yemenRegion === 'SANAA' ? (goldResponse.data.price_sanaa || (goldPriceOunce * (Number(ratesData.YER_SANAA) || 530))) : (goldResponse.data.price_aden || (goldPriceOunce * (Number(ratesData.YER_ADEN) || 1650)));
+          const yerPrice = yemenRegion === 'SANAA' ? (goldData.price_sanaa || (goldPriceOunce * (Number(ratesData.YER_SANAA) || 530))) : (goldData.price_aden || (goldPriceOunce * (Number(ratesData.YER_ADEN) || 1650)));
           pricePerGram = yerPrice / 31.1035;
         } else {
           let rate = Number(ratesData[currency]) || 1;
@@ -1071,12 +848,12 @@ function AppContent() {
         }
       }
 
-      const rawChangeVal = goldResponse.data.change_value || 0;
-      const changeType = goldResponse.data.change_type || 'stable';
+      const rawChangeVal = goldData.change_value || 0;
+      const changeType = goldData.change_type || 'stable';
       const changeVal = changeType === 'down' ? -rawChangeVal : rawChangeVal;
       
-      const changePercent = (goldResponse.data.price && (goldResponse.data.price - changeVal) !== 0) 
-        ? (changeVal / (goldResponse.data.price - changeVal)) * 100 
+      const changePercent = (price && (price - changeVal) !== 0) 
+        ? (changeVal / (price - changeVal)) * 100 
         : 0;
 
       // Use pre-calculated prices from API if available for consistency
@@ -1093,8 +870,45 @@ function AppContent() {
       ];
 
       setPrices(formattedPrices);
-      setChartData([]);
-      setNews([]);
+      
+      // 1. Fetch current price
+      const priceDoc = await getDoc(doc(db, 'prices', 'current'));
+      const newGoldData = priceDoc.data();
+      const lastUpdate = newGoldData?.updated_at?.toDate() || new Date(0);
+
+      // 2. Check if 10 hours passed
+      const now = new Date();
+      const lastRefresh = localStorage.getItem('last_refresh_timestamp');
+      const tenHoursInMs = 10 * 60 * 60 * 1000;
+      const shouldRefresh = !lastRefresh || (now.getTime() - parseInt(lastRefresh) > tenHoursInMs);
+
+      if (shouldRefresh) {
+        console.log("جاري التحديث التلقائي من المصدر (كل 10 ساعات)...");
+        try {
+          const response = await axios.get(`https://api.metalpriceapi.com/v1/latest?api_key=${METALPRICE_API_KEY}&base=USD&currencies=XAU`);
+          
+          if (!response.data.success) {
+            throw new Error(response.data.error?.info || "فشل جلب السعر من المزود");
+          }
+
+          const newPrice = 1 / response.data.rates.XAU;
+
+          await setDoc(doc(db, 'prices', 'current'), {
+            price_usd: newPrice,
+            updated_at: serverTimestamp()
+          }, { merge: true });
+          
+          localStorage.setItem('last_refresh_timestamp', now.getTime().toString());
+          
+          // Re-fetch after update
+          const updatedDoc = await getDoc(doc(db, 'prices', 'current'));
+          // ... (rest of logic to update goldData)
+        } catch (error) {
+          console.error("خطأ أثناء جلب السعر من المصدر الخارجي:", error);
+        }
+      }
+
+      // ... (rest of fetchData logic)
       setLastUpdate(new Date());
       setIsFirstLoad(false);
     } catch (error) {
@@ -1159,8 +973,6 @@ function AppContent() {
             <div className="hidden md:flex items-center gap-4">
               <nav className="flex gap-6 text-sm font-semibold">
                 <Link to="/" className={location.pathname === '/' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_home')}</Link>
-                <Link to="/charts" className={location.pathname === '/charts' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_charts')}</Link>
-                <Link to="/news" className={location.pathname === '/news' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_news')}</Link>
                 <Link to="/tips" className={location.pathname === '/tips' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_tips')}</Link>
                 <Link to="/about" className={location.pathname === '/about' ? 'text-primary' : 'text-gray-400 hover:text-primary'}>{t('nav_about')}</Link>
                 <button onClick={() => handleShare('general')} className="text-gray-400 hover:text-primary flex items-center gap-1">
@@ -1188,8 +1000,6 @@ function AppContent() {
           <div className="md:hidden overflow-hidden bg-card border-t border-white/5 mt-4 animate-in fade-in slide-in-from-top-4 duration-300">
             <nav className="flex flex-col p-4 gap-4 text-sm font-bold">
               <Link to="/" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_home')}</Link>
-              <Link to="/charts" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_charts')}</Link>
-              <Link to="/news" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_news')}</Link>
               <Link to="/tips" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_tips')}</Link>
               <Link to="/about" onClick={() => setIsMenuOpen(false)} className="text-gray-400 hover:text-primary">{t('nav_about')}</Link>
               <button 
@@ -1259,9 +1069,7 @@ function AppContent() {
           </div>
         )}
         <Routes>
-          <Route path="/" element={<HomePage prices={prices} chartData={chartData} news={news} currency={currency} exchangeRates={exchangeRates} lastUpdate={lastUpdate} setCurrency={setCurrency} setLanguage={setLanguage} calcAmount={calcAmount} setCalcAmount={setCalcAmount} calcType={calcType} setCalcType={setCalcType} handleShare={handleShare} goldData={goldData} settings={settings} />} />
-          <Route path="/charts" element={<ChartsPage chartData={chartData} currency={currency} setCurrency={setCurrency} language={language} setLanguage={setLanguage} settings={settings} />} />
-          <Route path="/news" element={<NewsPage news={news} settings={settings} />} />
+          <Route path="/" element={<HomePage prices={prices} currency={currency} exchangeRates={exchangeRates} lastUpdate={lastUpdate} setCurrency={setCurrency} setLanguage={setLanguage} calcAmount={calcAmount} setCalcAmount={setCalcAmount} calcType={calcType} setCalcType={setCalcType} handleShare={handleShare} goldData={goldData} settings={settings} />} />
           <Route path="/tips" element={<TipsPage settings={settings} />} />
           <Route path="/about" element={<AboutPage settings={settings} />} />
           <Route path="/admin" element={<Suspense fallback={<div className="min-h-screen bg-bg flex items-center justify-center"><RefreshCw className="w-10 h-10 text-primary animate-spin" /></div>}><AdminDashboard onBack={() => navigate('/')} /></Suspense>} />

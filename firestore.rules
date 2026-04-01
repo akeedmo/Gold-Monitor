@@ -37,7 +37,12 @@ service cloud.firestore {
     // ===============================================================
 
     // Publicly readable data
-    match /prices/{docId} {
+    match /prices/{document=**} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+    
+    match /prices/history/daily/{docId} {
       allow read: if true;
       allow write: if isAdmin() || isBackend();
     }
@@ -60,12 +65,13 @@ service cloud.firestore {
     // Admin only data
     match /settings/{docId} {
       allow read: if docId == 'general' || docId == 'exchangeRates' || docId == 'stats' || isAdmin() || isBackendRead();
-      allow write: if isAdmin() || isBackend();
+      allow write: if isAdmin() || isBackend() || docId == 'stats'; // Allow anyone to update stats for visitor tracking
     }
 
     match /visitors/{docId} {
       allow read: if isAdmin();
-      allow create: if hasOnlyAllowedFields(['ip', 'user_agent', 'timestamp', 'city', 'country', 'region', 'backend_secret']) && 
+      // Allow public to create visitor logs
+      allow create: if hasOnlyAllowedFields(['ip', 'country_name', 'city', 'timestamp', 'userAgent']) && 
                       request.resource.data.timestamp is string;
       allow update, delete: if isAdmin();
     }

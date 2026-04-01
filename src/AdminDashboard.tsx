@@ -47,6 +47,7 @@ import {
 import axios from 'axios';
 import { useTranslation } from './i18n';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
+import { METALPRICE_API_KEY } from './config';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, query, orderBy, limit, getDocs, addDoc } from 'firebase/firestore';
 
@@ -85,16 +86,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     manualPriceMode: false,
     manualPrice: 2150
   });
-  const [apiKeyInfo, setApiKeyInfo] = useState<any>({ hasKey: false, isFromFirestore: false, maskedKey: null });
   const [dbStatus, setDbStatus] = useState<any>(null);
-  const [newApiKey, setNewApiKey] = useState('');
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [apiKeyLoading, setApiKeyLoading] = useState(false);
-  const [visitors, setVisitors] = useState<any[]>([]);
-  const [news, setNews] = useState<any[]>([]);
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState('overview');
-  const [priceHistory, setPriceHistory] = useState<any[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
@@ -102,6 +94,13 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [user, setUser] = useState<any>(auth.currentUser);
+  const [visitors, setVisitors] = useState<any[]>([]);
+  const [news, setNews] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [priceHistory, setPriceHistory] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [apiKeyLoading, setApiKeyLoading] = useState(false);
+  const [newApiKey, setNewApiKey] = useState('');
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -131,6 +130,19 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     });
     return () => unsubscribe();
   }, []);
+
+  const handleManualRefresh = async () => {
+    setLoading(true);
+    try {
+      await updatePriceManually(false, 0); // Trigger auto-fetch
+      showSuccess("تم تحديث الأسعار بنجاح");
+      fetchData();
+    } catch (err: any) {
+      setError("فشل تحديث الأسعار: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const [passwordConfirmed, setPasswordConfirmed] = useState(() => {
     return localStorage.getItem('password_confirmed') === 'true';
@@ -286,7 +298,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
 
       let newsData: any[] = [];
       try {
-        const newsQuery = query(collection(db, 'news'), orderBy('date', 'desc'), limit(20));
+        const newsQuery = query(collection(db, 'news'), orderBy('pubDate', 'desc'), limit(20));
         const newsSnap = await getDocs(newsQuery);
         newsData = newsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       } catch (e) {
@@ -337,14 +349,20 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
         handleFirestoreError(e, OperationType.GET, 'settings/exchangeRates');
       }
 
-      // Fetch API key info from server (masked)
+      // Fetch API key info from Firestore
       try {
-        const response = await axios.get('/api/admin/api-key');
-        if (response.data.hasKey) {
-          setApiKeyInfo(response.data);
+        const keysDoc = await getDoc(doc(db, 'settings', 'apiKeys'));
+        if (keysDoc.exists()) {
+          const data = keysDoc.data();
+          const key = data.METALPRICE_API_KEY || data.metalpriceapi_key;
+          if (key) {
+            // Key found
+          } else {
+            // No key found
+          }
         }
       } catch (e) {
-        console.error("Failed to fetch API key info from server:", e);
+        console.error("Failed to fetch API key info from Firestore:", e);
       }
 
       let apiKeysData: any = { manualPriceMode: false, manualPrice: 2150 };
@@ -397,13 +415,20 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
 
   const fetchApiKeyInfo = async () => {
     try {
-      const res = await axios.get('/api/admin/api-key');
-      setApiKeyInfo(res.data);
-      
-      const statusRes = await axios.get('/api/status');
-      setDbStatus(statusRes.data);
+      const keysDoc = await getDoc(doc(db, 'settings', 'apiKeys'));
+      if (keysDoc.exists()) {
+        const data = keysDoc.data();
+        const key = data.METALPRICE_API_KEY || data.metalpriceapi_key;
+        if (key) {
+          // Key found
+        } else {
+          // No key found
+        }
+      }
+      setDbStatus({ firestoreStatus: 'Connected (Serverless)' });
     } catch (err) {
-      console.error("Failed to fetch API key info", err);
+      console.error("Failed to fetch API key info from Firestore", err);
+      setDbStatus({ firestoreStatus: 'Error' });
     }
   };
 
@@ -411,19 +436,97 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     if (!newApiKey.trim()) return;
     setApiKeyLoading(true);
     try {
-      const res = await axios.post('/api/admin/api-key', { apiKey: newApiKey.trim() });
+      await setDoc(doc(db, 'settings', 'apiKeys'), { METALPRICE_API_KEY: newApiKey.trim() }, { merge: true });
       showSuccess("تم تحديث مفتاح الـ API بنجاح");
       setNewApiKey('');
-      if (res.data.maskedKey) {
-        setApiKeyInfo((prev: any) => ({ ...prev, hasKey: true, isFromFirestore: true, maskedKey: res.data.maskedKey }));
-      } else {
-        fetchApiKeyInfo();
-      }
+      // setApiKeyInfo({
+      //   hasKey: true,
+      //   isFromFirestore: true,
+      //   maskedKey: newApiKey.trim().substring(0, 4) + '...' + newApiKey.trim().substring(newApiKey.trim().length - 4)
+      // });
       fetchData(); // Refresh all settings to sync state
     } catch (err) {
       setError("فشل تحديث مفتاح الـ API");
     } finally {
       setApiKeyLoading(false);
+    }
+  };
+
+  const updatePriceManually = async (isManualMode: boolean, manualPriceValue: number) => {
+    try {
+      let pricePerOunce = 2150;
+      let remainingApi = 0;
+      let updateType = isManualMode ? 'manual' : 'auto'; // 'auto' here means fetching from external API manually triggered
+
+      if (isManualMode) {
+        pricePerOunce = manualPriceValue;
+      } else {
+        // Fetch from external API
+        const activeKey = METALPRICE_API_KEY;
+        
+        if (!activeKey) {
+          throw new Error("لم يتم تكوين مفتاح API.");
+        }
+
+        const response = await axios.get(`https://api.metalpriceapi.com/v1/latest?api_key=${activeKey}&base=USD&currencies=XAU`);
+        
+        if (!response.data.success) {
+          throw new Error(response.data.error?.info || "فشل جلب السعر من المزود");
+        }
+
+        pricePerOunce = 1 / response.data.rates.XAU;
+        remainingApi = response.data.remaining || 0;
+      }
+
+      // Save to Firestore
+      const now = new Date();
+      const newPriceData = {
+        price: pricePerOunce,
+        price_usd: pricePerOunce,
+        updated_at: now.toISOString(),
+        last_update: now.getTime(),
+        update_type: updateType,
+        remaining_api: remainingApi,
+        change_value: 0, // Simplified for now, could calculate based on previous
+        change_type: 'stable'
+      };
+
+      // Get previous to calculate change
+      const cacheRef = doc(db, 'prices', 'gold_rates');
+      const cacheSnap = await getDoc(cacheRef);
+      if (cacheSnap.exists()) {
+        const prevData = cacheSnap.data();
+        const prevPrice = prevData.price || prevData.price_usd;
+        if (prevPrice) {
+          const change = pricePerOunce - prevPrice;
+          newPriceData.change_value = Math.abs(change);
+          newPriceData.change_type = change > 0 ? 'up' : change < 0 ? 'down' : 'stable';
+        }
+      }
+
+      await setDoc(doc(db, 'prices', 'gold_rates'), newPriceData);
+      
+      // Update stats
+      const statsRef = doc(db, 'settings', 'stats');
+      const statsSnap = await getDoc(statsRef);
+      let currentStats: any = statsSnap.exists() ? statsSnap.data() : { auto_update_count: 0, manual_update_count: 0 };
+      
+      if (isManualMode) {
+        currentStats.manual_update_count = (currentStats.manual_update_count || 0) + 1;
+      } else {
+        currentStats.auto_update_count = (currentStats.auto_update_count || 0) + 1;
+      }
+      
+      await setDoc(statsRef, currentStats, { merge: true });
+      
+      // Also log to history
+      const historyId = now.toISOString().split('T')[0]; // YYYY-MM-DD
+      await setDoc(doc(db, 'price_history', historyId), newPriceData, { merge: true });
+
+      return newPriceData;
+    } catch (error: any) {
+      console.error("Error updating price:", error);
+      throw error;
     }
   };
 
@@ -489,8 +592,9 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     try {
       await addDoc(collection(db, 'news'), {
         title: announcementTitle,
-        content: announcementContent,
-        date: new Date().toISOString()
+        contentSnippet: announcementContent,
+        pubDate: new Date().toISOString(),
+        source: 'إعلان إداري'
       });
       showSuccess(t('success_ad_published'));
       setAnnouncementTitle('');
@@ -707,6 +811,8 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                   { label: t('week_visits'), value: stats.week, icon: Calendar, color: 'text-blue-400' },
                   { label: t('total_news'), value: stats.totalNews, icon: Newspaper, color: 'text-purple-400' },
                   { label: t('total_visits'), value: stats.total, icon: Users, color: 'text-green-400' },
+                  { label: 'تحديثات تلقائية', value: stats.auto_update_count || 0, icon: RefreshCw, color: 'text-yellow-400' },
+                  { label: 'تحديثات يدوية', value: stats.manual_update_count || 0, icon: RefreshCw, color: 'text-orange-400' },
                 ].map(item => (
                   <div key={item.label} className="bg-card p-6 rounded-2xl border border-gold/10 shadow-lg">
                     <div className={`p-2 rounded-lg bg-white/5 w-fit mb-4 ${item.color}`}>
@@ -1246,7 +1352,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                           
                           // If manual price mode is enabled, trigger a server update to apply it immediately
                           if (apiKeys.manualPriceMode) {
-                            await axios.post('/api/admin/update-price');
+                            await updatePriceManually(true, apiKeys.manualPrice);
                           }
                           
                           showSuccess('تم حفظ إعدادات السعر اليدوي بنجاح');
@@ -1278,25 +1384,21 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                       setSaveLoading(true);
                       setError(''); // Clear previous errors
                       try {
-                        const res = await axios.post('/api/admin/update-price');
-                        if (res.data.success) {
-                          const newPrice = res.data.data.price_usd;
-                          const newTimestamp = res.data.data.updated_at;
-                          
-                          setStats(prev => prev ? {
-                            ...prev,
-                            latestPrice: { 
-                              price: newPrice, 
-                              timestamp: newTimestamp 
-                            }
-                          } : null);
-                          
-                          showSuccess(`تم تحديث الأسعار بنجاح! السعر الحالي: $${newPrice.toLocaleString()}`);
-                          window.dispatchEvent(new CustomEvent('price-updated'));
-                          fetchData();
-                        } else {
-                          throw new Error(res.data.error);
-                        }
+                        const newPriceData = await updatePriceManually(false, 0);
+                        const newPrice = newPriceData.price_usd;
+                        const newTimestamp = newPriceData.updated_at;
+                        
+                        setStats(prev => prev ? {
+                          ...prev,
+                          latestPrice: { 
+                            price: newPrice, 
+                            timestamp: newTimestamp 
+                          }
+                        } : null);
+                        
+                        showSuccess(`تم تحديث الأسعار بنجاح! السعر الحالي: $${newPrice.toLocaleString()}`);
+                        window.dispatchEvent(new CustomEvent('price-updated'));
+                        fetchData();
                       } catch (err: any) {
                         console.error("Manual price update failed:", err);
                         setError(err.message || 'فشل تحديث الأسعار - يرجى المحاولة لاحقاً');
@@ -1325,70 +1427,6 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                       <p className={`text-xl font-bold ${Number(stats?.remaining_api) < 50 ? 'text-red-400' : 'text-green-400'}`}>
                         {stats?.remaining_api !== undefined ? stats.remaining_api : '---'}
                       </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-card p-8 rounded-2xl border border-gold/10 shadow-lg space-y-6">
-                <h3 className="text-lg font-bold flex items-center justify-between gap-2 text-white">
-                  <div className="flex items-center gap-2">
-                    <Key size={20} className="text-primary" />
-                    إدارة مفتاح MetalpriceAPI
-                  </div>
-                  <button 
-                    onClick={fetchApiKeyInfo}
-                    disabled={apiKeyLoading}
-                    className="p-1 hover:bg-white/10 rounded-lg transition-all"
-                    title="تحديث معلومات المفتاح"
-                  >
-                    <RefreshCw size={16} className={apiKeyLoading ? 'animate-spin' : ''} />
-                  </button>
-                </h3>
-                <p className="text-gray-400 text-sm">
-                  يمكنك إضافة مفتاح API جديد هنا. سيتم استخدامه بدلاً من المفتاح الافتراضي في النظام.
-                </p>
-                
-                <div className="space-y-4">
-                  <div className="p-4 bg-white/5 rounded-xl border border-white/10">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-xs font-bold text-gray-500">المفتاح الحالي:</span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${apiKeyInfo.isFromFirestore ? 'bg-green-400/10 text-green-400' : 'bg-blue-400/10 text-blue-400'}`}>
-                        {apiKeyInfo.isFromFirestore ? 'مخصص (Firestore)' : 'افتراضي (Env)'}
-                      </span>
-                    </div>
-                    <div className="text-sm font-mono text-white">
-                      {apiKeyInfo.maskedKey || 'لا يوجد مفتاح مكون'}
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <label className="text-xs font-bold text-gray-500 block">إضافة مفتاح جديد:</label>
-                    <div className="space-y-4">
-                      <div className="relative flex items-center">
-                        <input 
-                          type={showApiKey ? "text" : "password"} 
-                          value={newApiKey}
-                          onChange={(e) => setNewApiKey(e.target.value)}
-                          placeholder="أدخل مفتاح API الجديد هنا..."
-                          className={`w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-primary ${isRTL ? 'pl-12' : 'pr-12'}`}
-                        />
-                        <button 
-                          type="button"
-                          onClick={() => setShowApiKey(!showApiKey)}
-                          className={`absolute inset-y-0 ${isRTL ? 'left-0' : 'right-0'} px-3 flex items-center text-gray-500 hover:text-primary transition-colors`}
-                        >
-                          {showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
-                        </button>
-                      </div>
-                      <button 
-                        onClick={handleUpdateApiKey}
-                        disabled={apiKeyLoading || !newApiKey.trim()}
-                        className="w-full py-4 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg"
-                      >
-                        تحديث مفتاح الـ API
-                        {apiKeyLoading ? <RefreshCw className="animate-spin" size={18} /> : <Save size={18} />}
-                      </button>
                     </div>
                   </div>
                 </div>
