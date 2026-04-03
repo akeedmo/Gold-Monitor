@@ -45,6 +45,9 @@ import {
   Cell
 } from 'recharts';
 import axios from 'axios';
+if (typeof window !== 'undefined') {
+  axios.defaults.baseURL = window.location.origin;
+}
 import { useTranslation } from './i18n';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from 'firebase/auth';
@@ -424,20 +427,22 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
         pricePerOunce = manualPriceValue;
       } else {
         // Fetch from external API via local proxy
-        const response = await axios.get('/api/gold-price');
+        const response = await axios.get('/get-gold-data');
+        const rawData = response.data;
+        const priceValue = rawData.price || rawData.price_usd || rawData.value;
         
-        if (!response.data || !response.data.price) {
-          throw new Error("فشل جلب السعر من المزود");
+        if (!priceValue) {
+          throw new Error(rawData.error || rawData.message || "فشل جلب السعر من المزود");
         }
 
-        pricePerOunce = response.data.price;
+        pricePerOunce = priceValue;
         remainingApi = 10; // Placeholder for remaining requests
         
         // Track API status
-        if (response.data._variant) {
+        if (rawData._variant) {
           setApiStatus({
-            isKeyUsed: !!response.data._isKeyUsed,
-            variant: response.data._variant
+            isKeyUsed: !!rawData._isKeyUsed,
+            variant: rawData._variant
           });
         }
       }

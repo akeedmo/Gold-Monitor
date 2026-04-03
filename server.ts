@@ -3,6 +3,7 @@ import axios from 'axios';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
+import cors from 'cors';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -10,13 +11,20 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Enable CORS
+  app.use(cors());
+  app.use(express.json());
+
+  // Health check
+  app.get('/health', (req, res) => res.json({ status: 'ok' }));
+
   // Cache for gold price
   let cachedPrice: any = null;
   let lastFetchTime = 0;
   const CACHE_DURATION = 60 * 1000; // 1 minute
 
-  // API route for proxy
-  app.get('/api/gold-price', async (req, res) => {
+  // API route for proxy - changed name to avoid ad-blockers
+  app.get('/get-gold-data', async (req, res) => {
     const now = Date.now();
     if (cachedPrice && (now - lastFetchTime < CACHE_DURATION)) {
       console.log('Returning cached price');
@@ -43,7 +51,8 @@ async function startServer() {
       // Always add free fallbacks at the end
       variations.push(
         { name: 'Free: XAU/USD', url: 'https://api.gold-api.com/price/XAU/USD', headers: {} },
-        { name: 'Free: XAU', url: 'https://api.gold-api.com/price/XAU', headers: {} }
+        { name: 'Free: XAU', url: 'https://api.gold-api.com/price/XAU', headers: {} },
+        { name: 'Fallback: GoldAPI.io', url: 'https://www.goldapi.io/api/XAU/USD', headers: { 'x-access-token': 'goldapi-free-test' } }
       );
       
       let response;
@@ -76,8 +85,10 @@ async function startServer() {
         throw lastErr || new Error('All variations failed');
       }
       
-      // Add metadata to help user know if key was used
+      // Add metadata and normalize price field
       const data = { ...response.data };
+      // Ensure we have a 'price' field regardless of what the API calls it
+      data.price = data.price || data.price_usd || data.value;
       data._variant = successfulVariant;
       data._isKeyUsed = successfulVariant.toLowerCase().includes('header') || successfulVariant.toLowerCase().includes('query');
       

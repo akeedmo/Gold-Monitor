@@ -23,6 +23,10 @@ import {
   Share2
 } from 'lucide-react';
 import axios from 'axios';
+// Set default baseURL for axios to ensure relative paths work correctly in all environments
+if (typeof window !== 'undefined') {
+  axios.defaults.baseURL = window.location.origin;
+}
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, addDoc, increment, getDocs, query, orderBy, limit, serverTimestamp } from 'firebase/firestore';
@@ -756,23 +760,26 @@ function AppContent() {
     if (isFirstLoad) setLoading(true);
     try {
       // Fetch gold price from local proxy to use the server-side API key
-      const url = '/api/gold-price';
+      const url = '/get-gold-data';
       const response = await axios.get(url);
       
       let goldData = null;
-      if (response.data && response.data.price) {
+      const rawData = response.data;
+      const priceValue = rawData.price || rawData.price_usd || rawData.value;
+
+      if (priceValue) {
         goldData = {
-          price: response.data.price,
-          price_usd: response.data.price,
+          price: priceValue,
+          price_usd: priceValue,
           timestamp: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          _isKeyUsed: response.data._isKeyUsed,
-          _variant: response.data._variant
+          _isKeyUsed: rawData._isKeyUsed,
+          _variant: rawData._variant
         };
       }
 
       if (!goldData) {
-        throw new Error("فشل جلب السعر من المزود");
+        throw new Error(rawData.error || rawData.message || "فشل جلب السعر من المزود");
       }
       
       const price = goldData.price_usd || goldData.price || 2150;
@@ -881,7 +888,7 @@ function AppContent() {
       if ((shouldRefresh || force) && !skipApi) {
         console.log("جاري التحديث التلقائي من المصدر (كل 10 ساعات)...");
         try {
-          const url = '/api/gold-price';
+          const url = '/get-gold-data';
           const response = await axios.get(url);
           
           if (!response.data || !response.data.price) {
