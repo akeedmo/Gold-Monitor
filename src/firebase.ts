@@ -4,9 +4,22 @@ import { getFirestore } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-export const db = (firebaseConfig as any).firestoreDatabaseId 
-  ? getFirestore(app, (firebaseConfig as any).firestoreDatabaseId) 
-  : getFirestore(app);
+
+// Try to get the specific database, fallback to default if it fails or is missing
+let firestore;
+try {
+  const dbId = (firebaseConfig as any).firestoreDatabaseId;
+  if (dbId && dbId !== '(default)') {
+    firestore = getFirestore(app, dbId);
+  } else {
+    firestore = getFirestore(app);
+  }
+} catch (e) {
+  console.warn('Failed to initialize Firestore with specific ID, falling back to default:', e);
+  firestore = getFirestore(app);
+}
+
+export const db = firestore;
 export const auth = getAuth(app);
 
 export enum OperationType {

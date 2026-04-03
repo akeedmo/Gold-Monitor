@@ -752,13 +752,11 @@ function AppContent() {
     }
   };
 
-  const fetchData = async (force = false) => {
+  const fetchData = async (force = false, skipApi = false) => {
     if (isFirstLoad) setLoading(true);
     try {
-      // Fetch gold price from external API
-      const url = GOLD_API_KEY 
-        ? `https://api.gold-api.com/price/XAU?apiKey=${GOLD_API_KEY}` 
-        : 'https://api.gold-api.com/price/XAU';
+      // Fetch gold price from local proxy to use the server-side API key
+      const url = '/api/gold-price';
       const response = await axios.get(url);
       
       let goldData = null;
@@ -767,7 +765,9 @@ function AppContent() {
           price: response.data.price,
           price_usd: response.data.price,
           timestamp: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          _isKeyUsed: response.data._isKeyUsed,
+          _variant: response.data._variant
         };
       }
 
@@ -878,16 +878,15 @@ function AppContent() {
       const tenHoursInMs = 10 * 60 * 60 * 1000;
       const shouldRefresh = !lastRefresh || (now.getTime() - parseInt(lastRefresh) > tenHoursInMs);
 
-      if (shouldRefresh) {
+      if ((shouldRefresh || force) && !skipApi) {
         console.log("جاري التحديث التلقائي من المصدر (كل 10 ساعات)...");
         try {
-          const url = GOLD_API_KEY 
-            ? `https://api.gold-api.com/price/XAU?apiKey=${GOLD_API_KEY}` 
-            : 'https://api.gold-api.com/price/XAU';
+          const url = '/api/gold-price';
           const response = await axios.get(url);
           
           if (!response.data || !response.data.price) {
-            throw new Error("فشل جلب السعر من المزود");
+            console.error("Invalid API response structure:", response.data);
+            throw new Error("فشل جلب السعر من المزود: هيكل البيانات غير صحيح");
           }
 
           const newPrice = response.data.price;
@@ -897,11 +896,18 @@ function AppContent() {
             updated_at: serverTimestamp()
           }, { merge: true });
           
+          // Update local state
+          setGoldData(prev => ({
+            ...prev,
+            price_usd: newPrice,
+            updated_at: new Date()
+          }));
+          
           localStorage.setItem('last_refresh_timestamp', now.getTime().toString());
           
           // Re-fetch after update
-          const updatedDoc = await getDoc(doc(db, 'prices', 'current'));
-          // ... (rest of logic to update goldData)
+          fetchData(false, true);
+          return;
         } catch (error) {
           console.error("خطأ أثناء جلب السعر من المصدر الخارجي:", error);
         }

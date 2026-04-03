@@ -98,6 +98,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [priceHistory, setPriceHistory] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [apiStatus, setApiStatus] = useState<{ isKeyUsed: boolean; variant: string } | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -422,8 +423,8 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
       if (isManualMode) {
         pricePerOunce = manualPriceValue;
       } else {
-        // Fetch from external API
-        const response = await axios.get(`https://api.gold-api.com/price/XAU`);
+        // Fetch from external API via local proxy
+        const response = await axios.get('/api/gold-price');
         
         if (!response.data || !response.data.price) {
           throw new Error("فشل جلب السعر من المزود");
@@ -431,6 +432,14 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
 
         pricePerOunce = response.data.price;
         remainingApi = 10; // Placeholder for remaining requests
+        
+        // Track API status
+        if (response.data._variant) {
+          setApiStatus({
+            isKeyUsed: !!response.data._isKeyUsed,
+            variant: response.data._variant
+          });
+        }
       }
 
       // Save to Firestore
@@ -1367,6 +1376,21 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                     <RefreshCw className={saveLoading ? "animate-spin" : ""} size={18} />
                     تحديث الأسعار الآن
                   </button>
+
+                  {apiStatus && (
+                    <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${apiStatus.isKeyUsed ? 'bg-green-500' : 'bg-amber-500'}`} />
+                        <span className="text-xs font-bold text-gray-300">حالة الـ API:</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${apiStatus.isKeyUsed ? 'bg-green-500/10 text-green-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                          {apiStatus.isKeyUsed ? 'مفتاح فعال ✓' : 'نسخة مجانية ⚠'}
+                        </span>
+                        <span className="text-[10px] text-gray-500 font-mono">({apiStatus.variant})</span>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-4 mt-4">
                     <div className="bg-white/5 border border-white/10 p-4 rounded-xl text-center">
