@@ -45,9 +45,6 @@ import {
   Cell
 } from 'recharts';
 import axios from 'axios';
-if (typeof window !== 'undefined') {
-  axios.defaults.baseURL = window.location.origin;
-}
 import { useTranslation } from './i18n';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from 'firebase/auth';
@@ -426,8 +423,24 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
       if (isManualMode) {
         pricePerOunce = manualPriceValue;
       } else {
-        // Fetch from external API via local proxy
-        const response = await axios.get('/get-gold-data');
+        // Fetch from external API directly
+        const apiKey = process.env.GOLD_API_KEY?.trim();
+        let response;
+        
+        if (apiKey) {
+          try {
+            response = await axios.get('https://api.gold-api.com/price/XAU/USD', {
+              headers: { 'x-api-key': apiKey }
+            });
+          } catch (e) {
+            console.warn("Admin manual fetch primary API failed:", e);
+          }
+        }
+        
+        if (!response) {
+          response = await axios.get('https://api.gold-api.com/price/XAU/USD');
+        }
+        
         const rawData = response.data;
         const priceValue = rawData.price || rawData.price_usd || rawData.value;
         
@@ -439,12 +452,10 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
         remainingApi = 10; // Placeholder for remaining requests
         
         // Track API status
-        if (rawData._variant) {
-          setApiStatus({
-            isKeyUsed: !!rawData._isKeyUsed,
-            variant: rawData._variant
-          });
-        }
+        setApiStatus({
+          isKeyUsed: !!apiKey,
+          variant: apiKey ? 'Direct with Key' : 'Direct Free'
+        });
       }
 
       // Save to Firestore

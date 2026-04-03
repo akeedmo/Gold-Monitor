@@ -23,10 +23,6 @@ import {
   Share2
 } from 'lucide-react';
 import axios from 'axios';
-// Set default baseURL for axios to ensure relative paths work correctly in all environments
-if (typeof window !== 'undefined') {
-  axios.defaults.baseURL = window.location.origin;
-}
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, addDoc, increment, getDocs, query, orderBy, limit, serverTimestamp } from 'firebase/firestore';
@@ -759,9 +755,23 @@ function AppContent() {
   const fetchData = async (force = false, skipApi = false) => {
     if (isFirstLoad) setLoading(true);
     try {
-      // Fetch gold price from local proxy to use the server-side API key
-      const url = '/get-gold-data';
-      const response = await axios.get(url);
+      // Fetch gold price directly from Gold API
+      const apiKey = process.env.GOLD_API_KEY?.trim();
+      let response;
+      
+      if (apiKey) {
+        try {
+          response = await axios.get('https://api.gold-api.com/price/XAU/USD', {
+            headers: { 'x-api-key': apiKey }
+          });
+        } catch (e) {
+          console.warn("Primary API fetch failed, trying fallback...", e);
+        }
+      }
+      
+      if (!response) {
+        response = await axios.get('https://api.gold-api.com/price/XAU/USD');
+      }
       
       let goldData = null;
       const rawData = response.data;
@@ -888,15 +898,29 @@ function AppContent() {
       if ((shouldRefresh || force) && !skipApi) {
         console.log("جاري التحديث التلقائي من المصدر (كل 10 ساعات)...");
         try {
-          const url = '/get-gold-data';
-          const response = await axios.get(url);
+          const apiKey = process.env.GOLD_API_KEY?.trim();
+          let response;
           
-          if (!response.data || !response.data.price) {
+          if (apiKey) {
+            try {
+              response = await axios.get('https://api.gold-api.com/price/XAU/USD', {
+                headers: { 'x-api-key': apiKey }
+              });
+            } catch (e) {
+              console.warn("Auto-refresh primary API failed:", e);
+            }
+          }
+          
+          if (!response) {
+            response = await axios.get('https://api.gold-api.com/price/XAU/USD');
+          }
+          
+          if (!response.data || !(response.data.price || response.data.price_usd)) {
             console.error("Invalid API response structure:", response.data);
             throw new Error("فشل جلب السعر من المزود: هيكل البيانات غير صحيح");
           }
 
-          const newPrice = response.data.price;
+          const newPrice = response.data.price || response.data.price_usd;
 
           await setDoc(doc(db, 'prices', 'current'), {
             price_usd: newPrice,
