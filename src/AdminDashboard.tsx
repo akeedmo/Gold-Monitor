@@ -47,7 +47,6 @@ import {
 import axios from 'axios';
 import { useTranslation } from './i18n';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
-import { METALPRICE_API_KEY } from './config';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, query, orderBy, limit, getDocs, addDoc } from 'firebase/firestore';
 
@@ -99,8 +98,6 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [priceHistory, setPriceHistory] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [apiKeyLoading, setApiKeyLoading] = useState(false);
-  const [newApiKey, setNewApiKey] = useState('');
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -409,48 +406,12 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     if (token && passwordConfirmed) {
       fetchData();
-      fetchApiKeyInfo();
     }
   }, [token, passwordConfirmed]);
 
-  const fetchApiKeyInfo = async () => {
-    try {
-      const keysDoc = await getDoc(doc(db, 'settings', 'apiKeys'));
-      if (keysDoc.exists()) {
-        const data = keysDoc.data();
-        const key = data.METALPRICE_API_KEY || data.metalpriceapi_key;
-        if (key) {
-          // Key found
-        } else {
-          // No key found
-        }
-      }
-      setDbStatus({ firestoreStatus: 'Connected (Serverless)' });
-    } catch (err) {
-      console.error("Failed to fetch API key info from Firestore", err);
-      setDbStatus({ firestoreStatus: 'Error' });
-    }
-  };
+  // Removed fetchApiKeyInfo
 
-  const handleUpdateApiKey = async () => {
-    if (!newApiKey.trim()) return;
-    setApiKeyLoading(true);
-    try {
-      await setDoc(doc(db, 'settings', 'apiKeys'), { METALPRICE_API_KEY: newApiKey.trim() }, { merge: true });
-      showSuccess("تم تحديث مفتاح الـ API بنجاح");
-      setNewApiKey('');
-      // setApiKeyInfo({
-      //   hasKey: true,
-      //   isFromFirestore: true,
-      //   maskedKey: newApiKey.trim().substring(0, 4) + '...' + newApiKey.trim().substring(newApiKey.trim().length - 4)
-      // });
-      fetchData(); // Refresh all settings to sync state
-    } catch (err) {
-      setError("فشل تحديث مفتاح الـ API");
-    } finally {
-      setApiKeyLoading(false);
-    }
-  };
+  // Removed handleUpdateApiKey
 
   const updatePriceManually = async (isManualMode: boolean, manualPriceValue: number) => {
     try {
@@ -462,20 +423,14 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
         pricePerOunce = manualPriceValue;
       } else {
         // Fetch from external API
-        const activeKey = METALPRICE_API_KEY;
+        const response = await axios.get(`https://api.gold-api.com/price/XAU`);
         
-        if (!activeKey) {
-          throw new Error("لم يتم تكوين مفتاح API.");
+        if (!response.data || !response.data.price) {
+          throw new Error("فشل جلب السعر من المزود");
         }
 
-        const response = await axios.get(`https://api.metalpriceapi.com/v1/latest?api_key=${activeKey}&base=USD&currencies=XAU`);
-        
-        if (!response.data.success) {
-          throw new Error(response.data.error?.info || "فشل جلب السعر من المزود");
-        }
-
-        pricePerOunce = 1 / response.data.rates.XAU;
-        remainingApi = response.data.remaining || 0;
+        pricePerOunce = response.data.price;
+        remainingApi = 10; // Placeholder for remaining requests
       }
 
       // Save to Firestore
@@ -1379,7 +1334,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                     </div>
                   )}
 
-                  <button 
+                    <button 
                     onClick={async () => {
                       setSaveLoading(true);
                       setError(''); // Clear previous errors
@@ -1410,10 +1365,10 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                     className="w-full py-3 bg-primary/10 text-primary border border-primary/20 rounded-xl font-bold hover:bg-primary/20 transition-all flex items-center justify-center gap-2"
                   >
                     <RefreshCw className={saveLoading ? "animate-spin" : ""} size={18} />
-                    تحديث الأسعار الآن (MetalpriceAPI)
+                    تحديث الأسعار الآن
                   </button>
 
-                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+                  <div className="grid grid-cols-2 gap-4 mt-4">
                     <div className="bg-white/5 border border-white/10 p-4 rounded-xl text-center">
                       <p className="text-[10px] text-gray-400 mb-1">تحديثات تلقائية</p>
                       <p className="text-xl font-bold text-white">{stats?.auto_update_count || 0}</p>
@@ -1421,12 +1376,6 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                     <div className="bg-white/5 border border-white/10 p-4 rounded-xl text-center">
                       <p className="text-[10px] text-gray-400 mb-1">تحديثات يدوية</p>
                       <p className="text-xl font-bold text-white">{stats?.manual_update_count || 0}</p>
-                    </div>
-                    <div className="bg-white/5 border border-white/10 p-4 rounded-xl text-center col-span-2 lg:col-span-1">
-                      <p className="text-[10px] text-gray-400 mb-1">الطلبات المتبقية (API)</p>
-                      <p className={`text-xl font-bold ${Number(stats?.remaining_api) < 50 ? 'text-red-400' : 'text-green-400'}`}>
-                        {stats?.remaining_api !== undefined ? stats.remaining_api : '---'}
-                      </p>
                     </div>
                   </div>
                 </div>
@@ -1448,7 +1397,6 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                         <th className="pb-4 px-4">عدن</th>
                         <th className="pb-4 px-4">التغير</th>
                         <th className="pb-4 px-4">النوع</th>
-                        <th className="pb-4 px-4">API المتبقي</th>
                       </tr>
                     </thead>
                     <tbody className="text-sm">
@@ -1482,9 +1430,6 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                             }`}>
                               {item.update_type === 'manual' ? 'يدوي' : 'تلقائي'}
                             </span>
-                          </td>
-                          <td className="py-4 px-4 text-gray-500 font-mono text-xs">
-                            {item.remaining_api}
                           </td>
                         </tr>
                       ))}

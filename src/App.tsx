@@ -29,7 +29,7 @@ import { doc, getDoc, setDoc, collection, addDoc, increment, getDocs, query, ord
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Helmet, HelmetProvider } from 'react-helmet-async';
 import { useTranslation } from './i18n';
-import { METALPRICE_API_KEY } from './config';
+import { GOLD_API_KEY } from './config';
 
 const AdminDashboard = lazy(() => import('./AdminDashboard'));
 
@@ -755,28 +755,24 @@ function AppContent() {
   const fetchData = async (force = false) => {
     if (isFirstLoad) setLoading(true);
     try {
-      // Fetch gold price from Firestore cache
+      // Fetch gold price from external API
+      const url = GOLD_API_KEY 
+        ? `https://api.gold-api.com/price/XAU?apiKey=${GOLD_API_KEY}` 
+        : 'https://api.gold-api.com/price/XAU';
+      const response = await axios.get(url);
+      
       let goldData = null;
-      try {
-        const docRef = doc(db, 'prices', 'gold_rates');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          goldData = docSnap.data();
-        }
-      } catch (e) {
-        console.error("Failed to fetch gold price from Firestore", e);
+      if (response.data && response.data.price) {
+        goldData = {
+          price: response.data.price,
+          price_usd: response.data.price,
+          timestamp: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
       }
 
       if (!goldData) {
-        // Fallback data if Firestore fails
-        goldData = {
-          price: 2150,
-          price_sanaa: 2150 * 530 / 31.1035,
-          price_aden: 2150 * 1650 / 31.1035,
-          change_value: 0,
-          change_type: 'stable',
-          updated_at: new Date().toISOString()
-        };
+        throw new Error("فشل جلب السعر من المزود");
       }
       
       const price = goldData.price_usd || goldData.price || 2150;
@@ -885,13 +881,16 @@ function AppContent() {
       if (shouldRefresh) {
         console.log("جاري التحديث التلقائي من المصدر (كل 10 ساعات)...");
         try {
-          const response = await axios.get(`https://api.metalpriceapi.com/v1/latest?api_key=${METALPRICE_API_KEY}&base=USD&currencies=XAU`);
+          const url = GOLD_API_KEY 
+            ? `https://api.gold-api.com/price/XAU?apiKey=${GOLD_API_KEY}` 
+            : 'https://api.gold-api.com/price/XAU';
+          const response = await axios.get(url);
           
-          if (!response.data.success) {
-            throw new Error(response.data.error?.info || "فشل جلب السعر من المزود");
+          if (!response.data || !response.data.price) {
+            throw new Error("فشل جلب السعر من المزود");
           }
 
-          const newPrice = 1 / response.data.rates.XAU;
+          const newPrice = response.data.price;
 
           await setDoc(doc(db, 'prices', 'current'), {
             price_usd: newPrice,
@@ -926,7 +925,7 @@ function AppContent() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 420000); // 7 min (approx 8.5 requests/hour)
+    const interval = setInterval(fetchData, 360000); // 6 min (10 requests/hour)
     const handlePriceUpdate = () => fetchData(true);
     window.addEventListener('price-updated', handlePriceUpdate);
     return () => {
