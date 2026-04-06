@@ -32,7 +32,9 @@ import {
   HelpCircle,
   ExternalLink,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Share2,
+  Copy
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -73,6 +75,18 @@ interface ApiKeysState {
   manualPrice: number;
 }
 
+const COMMON_LOCATIONS = [
+  { country: 'اليمن', city: 'صنعاء' },
+  { country: 'اليمن', city: 'عدن' },
+  { country: 'اليمن', city: 'تعز' },
+  { country: 'السعودية', city: 'الرياض' },
+  { country: 'السعودية', city: 'جدة' },
+  { country: 'الإمارات', city: 'دبي' },
+  { country: 'مصر', city: 'القاهرة' },
+  { country: 'الأردن', city: 'عمان' },
+  { country: 'تركيا', city: 'إسطنبول' },
+];
+
 export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   const { t, language, isRTL } = useTranslation();
   const locale = language === 'ar' ? 'ar-SA' : language === 'tr' ? 'tr-TR' : 'en-US';
@@ -98,6 +112,70 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [priceHistory, setPriceHistory] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [generatedPosts, setGeneratedPosts] = useState<any[]>([]);
+  const [socialData, setSocialData] = useState({
+    country: 'اليمن',
+    city: 'صنعاء',
+    yesterday: ''
+  });
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    showSuccess('تم نسخ النص إلى الحافظة');
+  };
+
+  const handleGeneratePosts = () => {
+    if (!stats?.latestPrice?.price) {
+      setError('لا توجد بيانات أسعار حالية لتوليد المنشورات');
+      return;
+    }
+
+    const price = stats.latestPrice.price;
+    const trend = socialData.yesterday 
+      ? (price > Number(socialData.yesterday) ? 'ارتفاع' : price < Number(socialData.yesterday) ? 'انخفاض' : 'ثابت')
+      : 'ثابت';
+    
+    const trendEmoji = trend === 'ارتفاع' ? '🔥 صعود' : trend === 'انخفاض' ? '📉 هبوط' : '📊 استقرار';
+    const time = new Date().toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+    const url = settings.monetization_link || window.location.origin;
+    const currency = 'USD';
+
+    // Calculate prices
+    const p24 = price.toFixed(2);
+    const p22 = (price * 22 / 24).toFixed(2);
+    const p21 = (price * 21 / 24).toFixed(2);
+    const p18 = (price * 18 / 24).toFixed(2);
+
+    const posts = [
+      {
+        type: '🚨 عاجل',
+        content: `🚨 **عاجل | تحديث أسعار الذهب الآن**\n\nشهدت أسعار الذهب في ${socialData.country} (${socialData.city}) حالة من ${trend} المفاجئ في هذه اللحظات! ⚠️\n\n💰 **الأسعار الحالية:**\n🔸 عيار 24: ${p24} ${currency}\n🔸 عيار 21: ${p21} ${currency}\n🔸 عيار 18: ${p18} ${currency}\n\n⏰ تحديث مباشر: ${time}\n\nتابع الأسعار لحظة بلحظة عبر الرابط:\n${url}\n\n#الذهب #أسعار_الذهب #${socialData.country} #عاجل`
+      },
+      {
+        type: '📊 مقارنة',
+        content: `📊 **مقارنة سريعة: ذهب ${socialData.city} بين اليوم وأمس**\n\nنلاحظ ${trendEmoji} في التداولات الحالية مقارنة بأسعار الأمس:\n\n🗓️ **أمس:** ${socialData.yesterday || '---'} ${currency} (عيار 21)\n📅 **اليوم:** ${p21} ${currency} (عيار 21)\n\nالفارق يعكس حالة السوق الحالية في ${socialData.country}. هل تعتقد أن هذا التوقيت مثالي؟\n\nالتفاصيل كاملة هنا:\n${url}\n\n#اقتصاد #الذهب_اليوم #بورصة_الذهب #${socialData.city}`
+      },
+      {
+        type: '📉 تحليل بسيط',
+        content: `📉 **قراءة سريعة لحركة السوق في ${socialData.country}**\n\nسوق الذهب في ${socialData.city} يمر بحالة ${trendEmoji} مستمرة. عيار 24 سجل ${p24} ${currency}، بينما استقر عيار 18 عند ${p18}.\n\nهذا التحرك ناتج عن تقلبات السوق العالمية وانعكاسها محلياً. نراقب معكم الإغلاق القادم. 🔥\n\nللمزيد من التحليلات:\n${url}\n\n#تحليل_اقتصادي #الذهب #${socialData.country} #استثمار`
+      },
+      {
+        type: '💡 نصيحة',
+        content: `💡 **نصيحة "ذهب" لمتابعينا في ${socialData.city}**\n\nمع حالة الـ ${trendEmoji} الحالية وصول عيار 21 إلى ${p21} ${currency}:\n\n✅ **إذا كنت مستثمر:** التريث ومراقبة مستويات الدعم قد يكون قراراً حكيماً.\n✅ **إذا كنت مقبل على زواج:** الأسعار الحالية قد تكون فرصة ذهبية قبل أي تقلبات جديدة.\n\nدائماً استشر الخبراء وتابع التحديث المباشر:\n${url}\n\n#نصيحة_مالية #ادخار #ذهب #${socialData.country}`
+      },
+      {
+        type: '🤔 سؤال تفاعلي',
+        content: `🤔 **سؤال للخبراء والمتابعين في ${socialData.country}..**\n\nالذهب في ${socialData.city} وصل اليوم لـ ${p21} ${currency} لعيار 21 (حالة ${trendEmoji}).\n\nتوقعاتكم للفترة القادمة؟\n🚀 صعود مستمر؟\n📉 هبوط تصحيحي؟\n⚖️ استقرار؟\n\nشاركونا آراءكم في التعليقات! 👇\n${url}\n\n#توقعات_الذهب #نقاش #أسواق #${socialData.city}`
+      },
+      {
+        type: '🔥 مختصر جداً',
+        content: `🔥 **ذهب ${socialData.city} يشتعل!**\n\nعيار 21: ${p21} ${currency} 💰\nالحالة: ${trendEmoji}\n\nتحديث ${time} ⏰\n\nالتفاصيل: ${url}\n\n#${socialData.country} #الذهب #Gold`
+      }
+    ];
+
+    setGeneratedPosts(posts);
+    showSuccess('تم توليد المنشورات بنجاح');
+  };
   const [apiStatus, setApiStatus] = useState<{ isKeyUsed: boolean; variant: string } | null>(null);
 
   useEffect(() => {
@@ -703,6 +781,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
             { id: 'overview', label: t('overview'), icon: BarChart3 },
             { id: 'notifications', label: t('notifications'), icon: Bell },
             { id: 'news', label: t('news_and_ads'), icon: Newspaper },
+            { id: 'social', label: 'مولد المنشورات', icon: Share2 },
             { id: 'rates', label: t('exchange_rates'), icon: DollarSign },
             { id: 'settings', label: t('settings_and_ads'), icon: Settings },
             { id: 'monetization', label: t('monetization'), icon: DollarSign },
@@ -752,6 +831,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                 {activeTab === 'overview' && t('overview')}
                 {activeTab === 'notifications' && t('manage_notifications')}
                 {activeTab === 'news' && t('manage_news')}
+                {activeTab === 'social' && 'مولد منشورات السوشيال ميديا'}
                 {activeTab === 'rates' && t('manage_rates')}
                 {activeTab === 'settings' && t('site_settings')}
                 {activeTab === 'monetization' && t('monetization')}
@@ -1091,6 +1171,95 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                   ))}
                 </div>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'social' && (
+            <div className="space-y-8">
+              <div className="bg-card p-8 rounded-2xl border border-gold/10 shadow-lg space-y-6">
+                <h3 className="text-lg font-bold flex items-center gap-2 text-white">
+                  <Share2 size={20} className="text-primary" />
+                  إعدادات المنشورات التلقائية
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-gray-500">اختر المنطقة (تلقائي)</label>
+                    <select 
+                      onChange={(e) => {
+                        const loc = COMMON_LOCATIONS[parseInt(e.target.value)];
+                        if (loc) {
+                          setSocialData({...socialData, country: loc.country, city: loc.city});
+                        }
+                      }}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-primary"
+                    >
+                      {COMMON_LOCATIONS.map((loc, idx) => (
+                        <option key={idx} value={idx} className="bg-bg text-white">
+                          {loc.country} - {loc.city}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-gray-500">الدولة / المدينة (تعديل يدوي)</label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        value={socialData.country}
+                        onChange={(e) => setSocialData({...socialData, country: e.target.value})}
+                        placeholder="الدولة"
+                        className="w-1/2 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-primary"
+                      />
+                      <input 
+                        type="text" 
+                        value={socialData.city}
+                        onChange={(e) => setSocialData({...socialData, city: e.target.value})}
+                        placeholder="المدينة"
+                        className="w-1/2 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-primary"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-gray-500">سعر أمس (اختياري)</label>
+                    <input 
+                      type="number" 
+                      value={socialData.yesterday}
+                      onChange={(e) => setSocialData({...socialData, yesterday: e.target.value})}
+                      placeholder="مثلاً: 2145"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                </div>
+                <button 
+                  onClick={handleGeneratePosts}
+                  className="w-full py-4 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-xl"
+                >
+                  <RefreshCw size={20} />
+                  توليد المنشورات الآن
+                </button>
+              </div>
+
+              {generatedPosts.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {generatedPosts.map((post, idx) => (
+                    <div key={idx} className="bg-card p-6 rounded-2xl border border-gold/10 shadow-lg flex flex-col h-full">
+                      <div className="flex justify-between items-center mb-4">
+                        <span className="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full">{post.type}</span>
+                        <button 
+                          onClick={() => copyToClipboard(post.content)}
+                          className="p-2 text-gray-400 hover:text-primary transition-colors bg-white/5 rounded-lg border border-white/10"
+                          title="نسخ النص"
+                        >
+                          <Copy size={16} />
+                        </button>
+                      </div>
+                      <div className="flex-1 bg-black/40 p-4 rounded-xl border border-white/5 font-sans text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">
+                        {post.content}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

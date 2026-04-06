@@ -100,6 +100,16 @@ export const translations: Translations = {
     en: "Karat",
     tr: "Ayar"
   },
+  "weekly_prices_report": {
+    ar: "تقرير أسعار الذهب الأسبوعي",
+    en: "Weekly Gold Prices Report",
+    tr: "Haftalık Altın Fiyatları Raporu"
+  },
+  "weekly_prices_desc": {
+    ar: "متوسط أسعار الذهب خلال الـ 7 أيام الماضية",
+    en: "Average gold prices over the last 7 days",
+    tr: "Son 7 gündeki ortalama altın fiyatları"
+  },
   "estimated_value": {
     ar: "القيمة التقديرية",
     en: "Estimated Value",

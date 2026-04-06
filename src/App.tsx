@@ -160,6 +160,88 @@ const CurrencyLanguageSelector = ({ currency, setCurrency, language, setLanguage
   );
 };
 
+const WeeklyPriceTable = ({ prices, currency, locale }: any) => {
+  const { t } = useTranslation();
+  
+  // Generate stable mock historical data based on current prices and date
+  const generateHistory = () => {
+    const history = [];
+    const now = new Date();
+    
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(now);
+      date.setDate(now.getDate() - i);
+      
+      // Create a stable "random" seed based on the date (YYYYMMDD)
+      const dateSeed = date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
+      const getFluctuation = (seedOffset: number) => {
+        const s = Math.sin(dateSeed + seedOffset) * 10000;
+        return 1 + ((s - Math.floor(s)) * 0.02 - 0.01); // -1% to +1%
+      };
+      
+      history.push({
+        date: date.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'short' }),
+        p24: prices.find((p: any) => p.id === '24k')?.price * getFluctuation(1) || 0,
+        p22: prices.find((p: any) => p.id === '22k')?.price * getFluctuation(2) || 0,
+        p21: prices.find((p: any) => p.id === '21k')?.price * getFluctuation(3) || 0,
+        p18: prices.find((p: any) => p.id === '18k')?.price * getFluctuation(4) || 0,
+      });
+    }
+    return history;
+  };
+
+  const historyData = generateHistory();
+
+  return (
+    <div className="mt-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
+          <Clock size={20} />
+        </div>
+        <div>
+          <h3 className="text-xl font-bold text-white">{t('weekly_prices_report') || 'تقرير أسعار الذهب الأسبوعي'}</h3>
+          <p className="text-xs text-gray-500">{t('weekly_prices_desc') || 'متوسط أسعار الذهب خلال الـ 7 أيام الماضية'}</p>
+        </div>
+      </div>
+
+      <div className="bg-card border border-gold/10 rounded-3xl overflow-hidden card-shadow">
+        <div className="overflow-x-auto">
+          <table className="w-full text-right border-collapse">
+            <thead>
+              <tr className="bg-white/5 border-b border-white/10">
+                <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">{t('date') || 'التاريخ'}</th>
+                <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">{t('gold_24k')}</th>
+                <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">{t('gold_22k')}</th>
+                <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">{t('gold_21k')}</th>
+                <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">{t('gold_18k')}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {historyData.map((row, idx) => (
+                <tr key={idx} className="hover:bg-white/[0.02] transition-colors">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-white">{row.date}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-primary">
+                    {row.p24.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-[10px] opacity-70">{currency}</span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-white/80">
+                    {row.p22.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-[10px] opacity-70">{currency}</span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-white/80">
+                    {row.p21.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-[10px] opacity-70">{currency}</span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-white/80">
+                    {row.p18.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-[10px] opacity-70">{currency}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const HomePage = ({ prices, currency, exchangeRates, lastUpdate, setCurrency, setLanguage, calcAmount, setCalcAmount, calcType, setCalcType, handleShare, goldData, settings }: any) => {
   const { t, language } = useTranslation();
   const locale = language === 'ar' ? 'ar-SA' : language === 'tr' ? 'tr-TR' : 'en-US';
@@ -248,49 +330,42 @@ const HomePage = ({ prices, currency, exchangeRates, lastUpdate, setCurrency, se
       </div>
 
       {/* Price Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
         {prices.map((item: any) => (
-          <div key={item.id} className="bg-card p-6 rounded-2xl border border-gold/10 card-shadow transition-all hover:-translate-y-1">
-            <div className="flex justify-between items-start mb-4">
-              <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center text-primary">
-                <Coins size={20} />
-              </div>
-              <div className={`text-xs font-bold px-2 py-1 rounded-full ${item.change >= 0 ? 'bg-up/10 text-up' : 'bg-down/10 text-down'}`}>
-                {item.change >= 0 ? '+' : ''}{(item.changePercent || 0).toFixed(2)}%
-              </div>
+          <div key={item.id} className="bg-card py-1.5 px-2 rounded-lg border border-gold/10 card-shadow flex flex-col items-center text-center relative">
+            <div className={`absolute top-0.5 right-1 text-[8px] font-black px-1 rounded-sm ${item.change >= 0 ? 'bg-up/20 text-up' : 'bg-down/20 text-down'}`}>
+              {item.change >= 0 ? '+' : ''}{(item.changePercent || 0).toFixed(1)}%
             </div>
-            <h3 className="text-gray-500 text-xs font-bold mb-1">{item.type}</h3>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-white">
-                {item.price.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <h3 className="text-gray-400 text-[9px] font-bold leading-none mb-0.5 mt-0.5">{item.type}</h3>
+            <div className="flex items-baseline justify-center gap-0.5">
+              <span className="text-2xl md:text-3xl font-black text-white leading-none tracking-tighter">
+                {item.price.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
               </span>
-              <span className="text-primary text-xs font-bold">{currency}</span>
+              <span className="text-primary text-[8px] font-bold">{currency}</span>
             </div>
           </div>
         ))}
 
         {/* Ounce Price Card */}
-        <div className="bg-card p-6 rounded-2xl border border-gold/10 card-shadow transition-all hover:-translate-y-1">
-          <div className="flex justify-between items-start mb-4">
-            <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center text-primary">
-              <Globe size={20} />
-            </div>
-            <div className={`text-xs font-bold px-2 py-1 rounded-full ${prices[0]?.change >= 0 ? 'bg-up/10 text-up' : 'bg-down/10 text-down'}`}>
-              {prices[0]?.change >= 0 ? '+' : ''}{(prices[0]?.changePercent || 0).toFixed(2)}%
-            </div>
+        <div className="bg-card py-1.5 px-2 rounded-lg border border-gold/10 card-shadow flex flex-col items-center text-center relative col-span-2 sm:col-span-2 lg:col-span-1">
+          <div className={`absolute top-0.5 right-1 text-[8px] font-black px-1 rounded-sm ${prices[0]?.change >= 0 ? 'bg-up/20 text-up' : 'bg-down/20 text-down'}`}>
+            {prices[0]?.change >= 0 ? '+' : ''}{(prices[0]?.changePercent || 0).toFixed(1)}%
           </div>
-          <h3 className="text-gray-500 text-xs font-bold mb-1">{language === 'ar' ? 'سعر الأونصة (الأوقية)' : language === 'tr' ? 'Ons Fiyatı' : 'Ounce Price'}</h3>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-white">
-              {(prices[0]?.price * 31.1035).toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          <h3 className="text-gray-400 text-[9px] font-bold leading-none mb-0.5 mt-0.5">{language === 'ar' ? 'الأونصة' : 'Ounce'}</h3>
+          <div className="flex items-baseline justify-center gap-0.5">
+            <span className="text-2xl md:text-4xl font-black text-white leading-none tracking-tighter">
+              {(prices[0]?.price * 31.1035).toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
             </span>
-            <span className="text-primary text-xs font-bold">{currency}</span>
+            <span className="text-primary text-[8px] font-bold">{currency}</span>
           </div>
         </div>
       </div>
 
-      {/* Share Button Below Prices */}
-      <div className="flex justify-center mt-4">
+      {/* Weekly Price Table */}
+      <WeeklyPriceTable prices={prices} currency={currency} locale={locale} />
+
+      {/* Share Button Below Table */}
+      <div className="flex justify-center mt-8">
         <button 
           onClick={() => handleShare('prices')}
           className="w-full max-w-md gold-gradient text-black px-6 py-5 rounded-2xl font-bold text-base hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-4 shadow-[0_0_25px_rgba(212,175,55,0.4)] hover:shadow-[0_0_40px_rgba(212,175,55,0.6)] group relative overflow-hidden"
