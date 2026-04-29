@@ -73,6 +73,7 @@ interface ApiKey {
 interface ApiKeysState {
   manualPriceMode: boolean;
   manualPrice: number;
+  margins?: Record<string, number>;
 }
 
 const COMMON_LOCATIONS = [
@@ -684,12 +685,12 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
 
   if (!passwordConfirmed && !user) {
     return (
-      <div className="min-h-screen bg-bg flex items-center justify-center p-6" dir={isRTL ? "rtl" : "ltr"}>
-        <div className="bg-card p-8 rounded-2xl shadow-xl w-full max-w-md border border-gold/10">
-          <h2 className="text-2xl font-bold text-white mb-6 text-center">{t('admin_dashboard')}</h2>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6" dir={isRTL ? "rtl" : "ltr"}>
+        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-gray-200">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">{t('admin_dashboard')}</h2>
           <button 
             onClick={handleGoogleLogin} 
-            className="w-full py-4 bg-white/5 border border-white/10 text-white rounded-xl font-bold hover:bg-white/10 transition-all flex items-center justify-center gap-3 mb-4"
+            className="w-full py-4 bg-gray-50 border border-gray-200 text-gray-900 rounded-xl font-bold hover:bg-gray-100 transition-all flex items-center justify-center gap-3 mb-4"
           >
             <Globe size={20} className="text-primary" />
             {t('login_with_google') || 'الدخول عبر جوجل'}
@@ -702,7 +703,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
             فتح في نافذة جديدة (إذا تم حظر النافذة المنبثقة)
           </button>
           {error && <p className="text-red-500 text-xs mt-4 text-center">{error}</p>}
-          <button onClick={onBack} className="mt-6 w-full py-3 text-gray-400 hover:text-white transition-colors flex items-center justify-center gap-2">
+          <button onClick={onBack} className="mt-6 w-full py-3 text-gray-400 hover:text-gray-900 transition-colors flex items-center justify-center gap-2">
             <ArrowRight size={16} className={isRTL ? "rotate-180" : ""} />
             {t('back_to_home')}
           </button>
@@ -713,17 +714,17 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
 
   if (!passwordConfirmed && user) {
     return (
-      <div className="min-h-screen bg-bg flex items-center justify-center p-6" dir={isRTL ? "rtl" : "ltr"}>
-        <div className="bg-card p-8 rounded-2xl shadow-xl w-full max-w-md border border-gold/10">
-          <h2 className="text-2xl font-bold text-white mb-6 text-center">تأكيد كلمة المرور</h2>
-          <p className="text-gray-400 text-sm mb-6 text-center">أنت مسجل الدخول كـ {user.email}. يرجى تأكيد كلمة مرور الإدارة للمتابعة.</p>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6" dir={isRTL ? "rtl" : "ltr"}>
+        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-gray-200">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">تأكيد كلمة المرور</h2>
+          <p className="text-gray-500 text-sm mb-6 text-center">أنت مسجل الدخول كـ {user.email}. يرجى تأكيد كلمة مرور الإدارة للمتابعة.</p>
           <form onSubmit={confirmPassword} className="space-y-4">
             <input 
               type="password" 
               placeholder="أدخل كلمة المرور"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary"
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 focus:outline-none focus:border-primary"
               autoFocus
             />
             <div className="flex items-center gap-2 px-1">
@@ -734,16 +735,16 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                 onChange={(e) => setRememberMe(e.target.checked)}
                 className="w-4 h-4 accent-primary rounded cursor-pointer"
               />
-              <label htmlFor="rememberMe" className="text-xs text-gray-400 cursor-pointer">تذكرني على هذا الجهاز</label>
+              <label htmlFor="rememberMe" className="text-xs text-gray-500 cursor-pointer">تذكرني على هذا الجهاز</label>
             </div>
             {error && <p className="text-red-500 text-xs">{error}</p>}
-            <button type="submit" disabled={loading} className="w-full py-4 gold-gradient text-black rounded-xl font-bold hover:opacity-90 transition-all">
+            <button type="submit" disabled={loading} className="w-full py-4 gold-gradient text-white rounded-xl font-bold hover:opacity-90 transition-all">
               {loading ? 'جاري التحقق...' : 'تأكيد'}
             </button>
           </form>
           <button 
             onClick={() => { auth.signOut(); setToken(null); setUser(null); }}
-            className="mt-4 w-full py-2 text-gray-500 hover:text-white text-xs transition-colors"
+            className="mt-4 w-full py-2 text-gray-400 hover:text-gray-900 text-xs transition-colors"
           >
             تسجيل الخروج من {user.email}
           </button>
@@ -753,10 +754,10 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <div className="min-h-screen bg-bg text-white flex flex-col md:flex-row" dir={isRTL ? "rtl" : "ltr"}>
+    <div className="min-h-screen bg-gray-50 text-gray-900 flex flex-col md:flex-row" dir={isRTL ? "rtl" : "ltr"}>
       {/* Mobile Header */}
-      <div className="md:hidden bg-card border-b border-gold/10 p-4 flex justify-between items-center sticky top-0 z-[60]">
-        <h2 className="text-lg font-bold gold-text-gradient flex items-center gap-2">
+      <div className="md:hidden bg-white border-b border-gray-200 p-4 flex justify-between items-center sticky top-0 z-[60]">
+        <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
           <Layout className="text-primary" size={20} />
           {t('admin_panel')}
         </h2>
@@ -767,11 +768,11 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
 
       {/* Sidebar */}
       <aside className={`
-        fixed md:sticky top-0 h-screen w-64 bg-card text-white flex flex-col border-l border-gold/10 z-[70] transition-transform duration-300
+        fixed md:sticky top-0 h-screen w-64 bg-white text-gray-900 flex flex-col border-l border-gray-200 z-[70] transition-transform duration-300
         ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
       `}>
-        <div className="p-6 border-b border-white/10 hidden md:block">
-          <h2 className="text-xl font-bold flex items-center gap-2 gold-text-gradient">
+        <div className="p-6 border-b border-gray-100 hidden md:block">
+          <h2 className="text-xl font-bold flex items-center gap-2 text-gray-900">
             <Layout className="text-primary" />
             {t('admin_panel')}
           </h2>
@@ -789,14 +790,14 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
             <button 
               key={item.id}
               onClick={() => { setActiveTab(item.id); setIsSidebarOpen(false); }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === item.id ? 'gold-gradient text-black' : 'hover:bg-white/5 text-white/60'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === item.id ? 'gold-gradient text-white' : 'hover:bg-gray-100 text-gray-500'}`}
             >
               <item.icon size={18} />
               <span className="font-bold text-sm">{item.label}</span>
             </button>
           ))}
         </nav>
-        <div className="p-4 border-t border-white/10">
+        <div className="p-4 border-t border-gray-200">
           <button 
             onClick={() => { 
               auth.signOut();
@@ -879,7 +880,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                       <item.icon size={20} />
                     </div>
                     <p className="text-gray-400 text-xs font-bold mb-1">{item.label}</p>
-                    <h3 className="text-2xl font-bold text-white">{item.value.toLocaleString(locale)}</h3>
+                    <h3 className="text-2xl font-bold text-gray-900">{item.value.toLocaleString(locale, { useGrouping: true })}</h3>
                   </div>
                 ))}
               </div>
@@ -1458,7 +1459,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                     {Object.entries(exchangeRates).map(([currency, rate]) => (
                       <div key={currency} className="p-2 bg-white/5 rounded-lg border border-white/5 text-center">
                         <p className="text-[10px] text-gray-400">{currency}</p>
-                        <p className="text-sm font-bold text-white">{Number(rate).toLocaleString(locale, { minimumFractionDigits: 2 })}</p>
+                        <p className="text-sm font-bold text-gray-900">{Number(rate).toLocaleString(locale, { minimumFractionDigits: 2, useGrouping: true })}</p>
                       </div>
                     ))}
                   </div>
@@ -1481,15 +1482,34 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                     </div>
                     
                     {apiKeys.manualPriceMode && (
-                      <div className="pt-3 border-t border-white/10">
-                        <label className="text-xs font-bold text-gray-500 mb-2 block">السعر اليدوي (USD)</label>
-                        <input 
-                          type="number" 
-                          step="0.01"
-                          value={apiKeys.manualPrice}
-                          onChange={(e) => setApiKeys({...apiKeys, manualPrice: Number(e.target.value)})}
-                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-primary"
-                        />
+                      <div className="pt-3 border-t border-white/10 space-y-3">
+                        <div>
+                          <label className="text-xs font-bold text-gray-500 mb-1 block">السعر اليدوي (USD)</label>
+                          <input 
+                            type="number" 
+                            step="0.01"
+                            value={apiKeys.manualPrice}
+                            onChange={(e) => setApiKeys({...apiKeys, manualPrice: Number(e.target.value)})}
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-primary"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {['24k', '22k', '21k', '18k'].map(karat => (
+                            <div key={karat}>
+                              <label className="text-[10px] font-bold text-gray-500 mb-0.5 block">هامش {karat}</label>
+                              <input 
+                                type="number" 
+                                step="0.01"
+                                value={apiKeys.margins?.[karat] || 0.5}
+                                onChange={(e) => setApiKeys({
+                                  ...apiKeys, 
+                                  margins: {...(apiKeys.margins || {}), [karat]: Number(e.target.value)}
+                                })}
+                                className="w-full bg-white/5 border border-white/10 rounded-xl px-2 py-1.5 text-xs text-white focus:outline-none focus:border-primary"
+                              />
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                     
@@ -1615,13 +1635,13 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                             {new Date(item.updated_at).toLocaleString(locale)}
                           </td>
                           <td className="py-4 px-4 font-bold text-white">
-                            ${item.price_usd.toLocaleString()}
+                            ${item.price_usd.toLocaleString(undefined, { useGrouping: true })}
                           </td>
                           <td className="py-4 px-4 text-gray-300">
-                            {Math.round(item.price_sanaa).toLocaleString()}
+                            {Math.round(item.price_sanaa).toLocaleString(undefined, { useGrouping: true })}
                           </td>
                           <td className="py-4 px-4 text-gray-300">
-                            {Math.round(item.price_aden).toLocaleString()}
+                            {Math.round(item.price_aden).toLocaleString(undefined, { useGrouping: true })}
                           </td>
                           <td className="py-4 px-4">
                             <div className={`flex items-center gap-1 font-bold ${

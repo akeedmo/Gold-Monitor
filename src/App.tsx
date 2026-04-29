@@ -64,12 +64,12 @@ const TickerBar = ({ prices, currency }: { prices: GoldPrice[], currency: string
   const { language } = useTranslation();
   const locale = language === 'ar' ? 'ar-SA' : language === 'tr' ? 'tr-TR' : 'en-US';
   return (
-    <div className="bg-[#050505] text-primary py-2 overflow-hidden whitespace-nowrap border-b border-gold/20">
+    <div className="bg-[#E5D3A3] text-gray-900 py-2 overflow-hidden whitespace-nowrap border-b border-primary/20">
       <div className="flex gap-12 items-center ticker-animation">
         {[...prices, ...prices, ...prices, ...prices].map((item, idx) => (
           <div key={`${item.id}-${idx}`} className="flex items-center gap-3">
             <span className="font-bold text-sm">
-              {item.type} - {item.price.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency}
+              {item.type} - {item.price.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true })} {currency}
             </span>
             <span className={`text-xs ${item.change >= 0 ? "text-up" : "text-down"}`}>
               {item.change >= 0 ? '▲' : '▼'} {(Math.abs(item.changePercent) || 0).toFixed(2)}%
@@ -126,7 +126,7 @@ const NewsCard = (props: any) => {
         <span className="text-[10px] text-gray-500">{new Date(item.pubDate).toLocaleDateString(locale)}</span>
       </div>
       <a href={item.link} target="_blank" rel="noopener noreferrer">
-        <h4 className="text-white font-bold mb-2 line-clamp-2 group-hover:text-primary transition-colors">{item.title}</h4>
+        <h4 className="text-gray-900 font-bold mb-2 line-clamp-2 group-hover:text-primary transition-colors">{item.title}</h4>
         <p className="text-gray-500 text-xs line-clamp-2 leading-relaxed mb-4">{content}</p>
       </a>
       <div className="flex gap-2">
@@ -144,17 +144,17 @@ const NewsCard = (props: any) => {
 const CurrencyLanguageSelector = ({ currency, setCurrency, language, setLanguage }: any) => {
   const { t } = useTranslation();
   return (
-    <div className="flex items-center gap-2 bg-white/5 px-3 py-2 rounded-lg border border-gold/20">
+    <div className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200">
       <Languages size={14} className="text-primary" />
-      <select value={language} onChange={(e) => setLanguage(e.target.value as any)} className="bg-transparent text-sm font-bold text-white focus:outline-none cursor-pointer">
-        <option value="ar" className="bg-card">العربية</option>
-        <option value="en" className="bg-card">English</option>
-        <option value="tr" className="bg-card">Türkçe</option>
+      <select value={language} onChange={(e) => setLanguage(e.target.value as any)} className="bg-transparent text-sm font-bold text-gray-900 focus:outline-none cursor-pointer">
+        <option value="ar" className="bg-white">العربية</option>
+        <option value="en" className="bg-white">English</option>
+        <option value="tr" className="bg-white">Türkçe</option>
       </select>
-      <div className="h-4 w-[1px] bg-white/10" />
+      <div className="h-4 w-[1px] bg-gray-200" />
       <Coins size={14} className="text-primary" />
-      <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="bg-transparent text-sm font-bold text-white focus:outline-none cursor-pointer">
-        {['USD', 'EUR', 'SAR', 'AED', 'GBP', 'TRY', 'KWD', 'QAR', 'BHD', 'OMR', 'JOD', 'EGP', 'LYD', 'YER'].map(code => <option key={code} value={code} className="bg-card">{code}</option>)}
+      <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="bg-transparent text-sm font-bold text-gray-900 focus:outline-none cursor-pointer">
+        {['USD', 'EUR', 'SAR', 'AED', 'GBP', 'TRY', 'KWD', 'QAR', 'BHD', 'OMR', 'JOD', 'EGP', 'LYD', 'YER'].map(code => <option key={code} value={code} className="bg-white">{code}</option>)}
       </select>
     </div>
   );
@@ -199,7 +199,7 @@ const WeeklyPriceTable = ({ prices, currency, locale }: any) => {
           <Clock size={20} />
         </div>
         <div>
-          <h3 className="text-xl font-bold text-white">{t('weekly_prices_report') || 'تقرير أسعار الذهب الأسبوعي'}</h3>
+          <h3 className="text-xl font-bold text-gray-900">{t('weekly_prices_report') || 'تقرير أسعار الذهب الأسبوعي'}</h3>
           <p className="text-xs text-gray-500">{t('weekly_prices_desc') || 'متوسط أسعار الذهب خلال الـ 7 أيام الماضية'}</p>
         </div>
       </div>
@@ -208,7 +208,7 @@ const WeeklyPriceTable = ({ prices, currency, locale }: any) => {
         <div className="overflow-x-auto">
           <table className="w-full text-right border-collapse">
             <thead>
-              <tr className="bg-white/5 border-b border-white/10">
+              <tr className="bg-gray-50 border-b border-gray-100">
                 <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">{t('date') || 'التاريخ'}</th>
                 <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">{t('gold_24k')}</th>
                 <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">{t('gold_22k')}</th>
@@ -216,21 +216,21 @@ const WeeklyPriceTable = ({ prices, currency, locale }: any) => {
                 <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">{t('gold_18k')}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5">
+            <tbody className="divide-y divide-gray-100">
               {historyData.map((row, idx) => (
-                <tr key={idx} className="hover:bg-white/[0.02] transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-white">{row.date}</td>
+                <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">{row.date}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-primary">
-                    {row.p24.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-[10px] opacity-70">{currency}</span>
+                    {row.p24.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true })} <span className="text-[10px] opacity-70">{currency}</span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-white/80">
-                    {row.p22.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-[10px] opacity-70">{currency}</span>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-700">
+                    {row.p22.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true })} <span className="text-[10px] opacity-70">{currency}</span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-white/80">
-                    {row.p21.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-[10px] opacity-70">{currency}</span>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-700">
+                    {row.p21.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true })} <span className="text-[10px] opacity-70">{currency}</span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-white/80">
-                    {row.p18.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-[10px] opacity-70">{currency}</span>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-700">
+                    {row.p18.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true })} <span className="text-[10px] opacity-70">{currency}</span>
                   </td>
                 </tr>
               ))}
@@ -242,7 +242,7 @@ const WeeklyPriceTable = ({ prices, currency, locale }: any) => {
   );
 };
 
-const HomePage = ({ prices, currency, exchangeRates, lastUpdate, setCurrency, setLanguage, calcAmount, setCalcAmount, calcType, setCalcType, handleShare, goldData, settings }: any) => {
+const HomePage = ({ prices, currency, exchangeRates, lastUpdate, setCurrency, setLanguage, calcAmount, setCalcAmount, calcType, setCalcType, handleShare, goldData, settings, margins }: any) => {
   const { t, language } = useTranslation();
   const locale = language === 'ar' ? 'ar-SA' : language === 'tr' ? 'tr-TR' : 'en-US';
   const [email, setEmail] = useState('');
@@ -331,20 +331,31 @@ const HomePage = ({ prices, currency, exchangeRates, lastUpdate, setCurrency, se
 
       {/* Price Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-        {prices.map((item: any) => (
-          <div key={item.id} className="bg-card py-1.5 px-2 rounded-lg border border-gold/10 card-shadow flex flex-col items-center text-center relative">
-            <div className={`absolute top-0.5 right-1 text-[8px] font-black px-1 rounded-sm ${item.change >= 0 ? 'bg-up/20 text-up' : 'bg-down/20 text-down'}`}>
-              {item.change >= 0 ? '+' : ''}{(item.changePercent || 0).toFixed(1)}%
+        {prices.map((item: any) => {
+          const margin = margins[item.id] || 0.5;
+          const buyPrice = (item.price + margin) * (exchangeRates[currency] || 1);
+          const sellPrice = (item.price - margin) * (exchangeRates[currency] || 1);
+          
+          return (
+            <div key={item.id} className="bg-white p-4 rounded-2xl border border-border card-shadow flex flex-col items-center text-center relative overflow-hidden transition-all hover:shadow-lg">
+              <h3 className="text-gray-500 text-sm font-bold mb-2">{item.type}</h3>
+              <div className="w-full space-y-1">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-gray-400">سعر السوق</span>
+                  <span className="font-bold text-gray-900">{(item.price * (exchangeRates[currency] || 1)).toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true })}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-green-600">شراء (المحل)</span>
+                  <span className="font-bold text-gray-900">{buyPrice.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true })}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-red-600">بيع (للمحل)</span>
+                  <span className="font-bold text-gray-900">{sellPrice.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true })}</span>
+                </div>
+              </div>
             </div>
-            <h3 className="text-gray-400 text-[9px] font-bold leading-none mb-0.5 mt-0.5">{item.type}</h3>
-            <div className="flex items-baseline justify-center gap-0.5">
-              <span className="text-2xl md:text-3xl font-black text-white leading-none tracking-tighter">
-                {item.price.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-              </span>
-              <span className="text-primary text-[8px] font-bold">{currency}</span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
 
         {/* Ounce Price Card */}
         <div className="bg-card py-1.5 px-2 rounded-lg border border-gold/10 card-shadow flex flex-col items-center text-center relative col-span-2 sm:col-span-2 lg:col-span-1">
@@ -353,16 +364,20 @@ const HomePage = ({ prices, currency, exchangeRates, lastUpdate, setCurrency, se
           </div>
           <h3 className="text-gray-400 text-[9px] font-bold leading-none mb-0.5 mt-0.5">{language === 'ar' ? 'الأونصة' : 'Ounce'}</h3>
           <div className="flex items-baseline justify-center gap-0.5">
-            <span className="text-2xl md:text-4xl font-black text-white leading-none tracking-tighter">
-              {(prices[0]?.price * 31.1035).toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+            <span className="text-2xl md:text-4xl font-black text-gray-900 leading-none tracking-tighter">
+              {(prices[0]?.price * 31.1035).toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: true })}
             </span>
             <span className="text-primary text-[8px] font-bold">{currency}</span>
           </div>
         </div>
       </div>
 
-      {/* Weekly Price Table */}
+          {/* Weekly Price Table */}
       <WeeklyPriceTable prices={prices} currency={currency} locale={locale} />
+      
+      <div className="mt-4 text-center text-xs text-gray-500 bg-white p-3 rounded-xl border border-border italic">
+        {language === 'ar' ? 'ملاحظة: الأسعار المعروضة هي أسعار عالمية تقريبية للذهب الخام ولا تشمل تكاليف المصنعية أو هامش ربح المحل.' : 'Note: The prices shown are approximate global raw gold prices and do not include craftsmanship fees or store profit margins.'}
+      </div>
 
       {/* Share Button Below Table */}
       <div className="flex justify-center mt-8">
@@ -382,7 +397,16 @@ const HomePage = ({ prices, currency, exchangeRates, lastUpdate, setCurrency, se
 
       {/* Calculator */}
       <div className="max-w-2xl mx-auto w-full">
-        <GoldCalculator prices={prices} currency={currency} amount={calcAmount} setAmount={setCalcAmount} type={calcType} setType={setCalcType} />
+        <GoldCalculator 
+          prices={prices} 
+          currency={currency} 
+          amount={calcAmount} 
+          setAmount={setCalcAmount} 
+          type={calcType} 
+          setType={setCalcType} 
+          margins={margins}
+          exchangeRate={exchangeRates[currency] || 1}
+        />
       </div>
 
       {/* Subscribe to Alerts */}
@@ -399,7 +423,7 @@ const HomePage = ({ prices, currency, exchangeRates, lastUpdate, setCurrency, se
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder={t('email_placeholder')} 
-              className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition-all text-white"
+              className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition-all text-gray-900"
             />
             <button onClick={() => handleSubscribe()} disabled={subLoading} className="w-full bg-primary text-black px-6 py-3 rounded-xl font-bold text-sm hover:bg-primary/80 transition-all shadow-lg shadow-primary/20">
               {subLoading ? <RefreshCw className="animate-spin mx-auto" size={18} /> : t('subscribe_now')}
@@ -415,7 +439,7 @@ const HomePage = ({ prices, currency, exchangeRates, lastUpdate, setCurrency, se
             <button 
               onClick={handleGoogleSubscribe} 
               disabled={subLoading} 
-              className="w-full bg-white/5 border border-white/10 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-white/10 transition-all flex items-center justify-center gap-2"
+              className="w-full bg-gray-50 border border-gray-100 text-gray-900 px-6 py-3 rounded-xl font-bold text-sm hover:bg-gray-100 transition-all flex items-center justify-center gap-2"
             >
               <Globe size={18} className="text-primary" />
               {t('subscribe_via_google') || 'الاشتراك عبر جوجل'}
@@ -429,7 +453,7 @@ const HomePage = ({ prices, currency, exchangeRates, lastUpdate, setCurrency, se
                   alert('OneSignal is not loaded yet');
                 }
               }}
-              className="w-full bg-white/5 border border-white/10 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-white/10 transition-all flex items-center justify-center gap-2"
+              className="w-full bg-gray-50 border border-gray-100 text-gray-900 px-6 py-3 rounded-xl font-bold text-sm hover:bg-gray-100 transition-all flex items-center justify-center gap-2"
             >
               <Bell size={18} className="text-primary" />
               {t('enable_push_notifications') || 'تفعيل التنبيهات'}
@@ -446,7 +470,7 @@ const HomePage = ({ prices, currency, exchangeRates, lastUpdate, setCurrency, se
         />
         <div className="absolute inset-0 bg-black/70 z-10" />
         <div className="relative z-20 p-8 md:p-12 flex flex-col items-center text-center">
-          <h1 className="text-3xl md:text-5xl font-bold text-white mb-4 drop-shadow-lg">
+          <h1 className="text-3xl md:text-5xl font-bold text-gray-900 mb-4 drop-shadow-sm">
             أسعار الذهب اليوم مباشرة <span className="gold-text-gradient">| Gold Price Live</span>
           </h1>
           <p className="text-gray-300 max-w-2xl text-sm md:text-base leading-relaxed mb-6">
@@ -552,15 +576,20 @@ const AboutPage = ({ settings }: any) => {
   );
 };
 
-const GoldCalculator = ({ prices, currency, amount, setAmount, type, setType }: any) => {
+const GoldCalculator = ({ prices, currency, amount, setAmount, type, setType, margins, exchangeRate }: any) => {
   const { t, language } = useTranslation();
   const locale = language === 'ar' ? 'ar-SA' : language === 'tr' ? 'tr-TR' : 'en-US';
-  const selectedPrice = prices.find((p: any) => p.id === type)?.price || 0;
-  const total = (Number(amount) || 0) * selectedPrice;
+  const item = prices.find((p: any) => p.id === type);
+  const price = item?.price || 0;
+  const margin = margins[type] || 0.5;
+  const rate = exchangeRate || 1;
+  const totalMarket = (Number(amount) || 0) * price * rate;
+  const totalBuy = (Number(amount) || 0) * (price + margin) * rate;
+  const totalSell = (Number(amount) || 0) * (price - margin) * rate;
 
   return (
-    <div className="bg-card rounded-2xl p-6 border border-gold/10 card-shadow">
-      <h3 className="font-bold mb-4 flex items-center gap-2">
+    <div className="bg-white rounded-3xl p-6 border border-border card-shadow mt-8">
+      <h3 className="font-bold mb-4 flex items-center gap-2 text-gray-900">
         <Calculator size={18} className="text-primary" />
         {t('gold_calculator')}
       </h3>
@@ -578,20 +607,28 @@ const GoldCalculator = ({ prices, currency, amount, setAmount, type, setType }: 
                 setAmount(val);
               }
             }} 
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary transition-colors text-white" 
+            className="w-full bg-bg border border-border rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary transition-colors text-gray-900" 
             placeholder={t('enter_weight')}
           />
         </div>
         <div>
           <label className="text-[10px] text-gray-500 uppercase font-bold mb-1 block">{t('karat')}</label>
-          <select value={type} onChange={(e) => setType(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary transition-colors text-white">
-            {prices.map((p: any) => <option key={p.id} value={p.id} className="bg-card">{p.type}</option>)}
+          <select value={type} onChange={(e) => setType(e.target.value)} className="w-full bg-bg border border-border rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary transition-colors text-gray-900">
+            {prices.map((p: any) => <option key={p.id} value={p.id}>{p.type}</option>)}
           </select>
         </div>
-        <div className="pt-4 border-t border-white/10">
-          <div className="flex justify-between items-center">
-            <span className="text-xs text-gray-500">{t('estimated_value')}</span>
-            <span className="text-lg font-bold text-primary">{total.toLocaleString(locale, { minimumFractionDigits: 2 })} {currency}</span>
+        <div className="pt-4 border-t border-border space-y-2">
+          <div className="flex justify-between items-center text-sm">
+            <span className="text-gray-500">سعر السوق التقريبي</span>
+            <span className="font-bold text-gray-900">{totalMarket.toLocaleString(locale, { minimumFractionDigits: 2 })} {currency}</span>
+          </div>
+          <div className="flex justify-between items-center text-sm">
+            <span className="text-green-600">قيمة الشراء (من المحل)</span>
+            <span className="font-bold text-gray-900">{totalBuy.toLocaleString(locale, { minimumFractionDigits: 2 })} {currency}</span>
+          </div>
+          <div className="flex justify-between items-center text-sm">
+            <span className="text-red-600">قيمة البيع (للمحل)</span>
+            <span className="font-bold text-gray-900">{totalSell.toLocaleString(locale, { minimumFractionDigits: 2 })} {currency}</span>
           </div>
         </div>
       </div>
@@ -671,6 +708,7 @@ function AppContent() {
   const [currency, setCurrency] = useState(localStorage.getItem('selectedCurrency') || 'USD');
   const [yemenRegion, setYemenRegion] = useState(localStorage.getItem('yemenRegion') || 'ADEN');
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({ USD: 1 });
+  const [margins, setMargins] = useState<Record<string, number>>({ '24k': 0.60, '22k': 0.50, '21k': 0.50, '18k': 0.40 });
   const [lastUpdate, setLastUpdate] = useState(new Date());
   const [settings, setSettings] = useState<any>({
     site_name: "مراقب الذهب",
@@ -784,25 +822,31 @@ function AppContent() {
     const hashtags = "\n\n#السعودية #اليمن #صنعاء #عدن #الذهب #اسعار_الذهب #مصر";
     
     if (type === 'prices') {
-      let countryName = t(currency);
-      if (currency === 'YER') {
-        countryName = `${t('YER')} - ${t(yemenRegion.toLowerCase())}`;
-      }
-      
       const formattedDate = lastUpdate.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
       const formattedTime = lastUpdate.toLocaleTimeString(locale);
       
-      const priceList = prices.map(p => {
-        // Force Arabic "عيار" for gold types in share text regardless of language
-        let typeLabel = p.type;
-        if (p.id === '24k') typeLabel = "عيار 24";
-        else if (p.id === '22k') typeLabel = "عيار 22";
-        else if (p.id === '21k') typeLabel = "عيار 21";
-        else if (p.id === '18k') typeLabel = "عيار 18";
-        
-        return `${typeLabel}: ${p.price.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
-      }).join('\n');
-      shareText = `🌟 ${t('site_title')} 🌟\n\n${t('prices_in_country')} ${countryName}:\n${priceList}\n\n🕒 ${t('last_update')}: ${formattedDate} ${formattedTime}\n\n${t('footer_desc')}${hashtags}`;
+      // Get base price for 21k in current currency
+      const price21k = prices.find(p => p.id === '21k')?.price || 0;
+      // Convert to USD (assuming current currency rate is exchangeRates[currency])
+      const price21kUSD = price21k / (exchangeRates[currency] || 1);
+      
+      // Curated list of relevant currencies
+      const currenciesToShow = ['USD', 'SAR', 'AED', 'EGP', 'JOD', 'LYD', 'KWD', 'QAR', 'BHD', 'OMR', 'YER', 'TRY', 'EUR', 'GBP'];
+      
+      const priceList = currenciesToShow
+        .filter(curr => exchangeRates[curr] && exchangeRates[curr] > 0)
+        .map(curr => {
+          const rate1 = exchangeRates[currency] || 1;
+          const rate2 = exchangeRates[curr];
+          const priceInCurr = (price21k / rate1) * rate2;
+          
+          // Use the currency code as the key for translation if available, otherwise just use curr
+          const currencyName = t(curr) !== curr ? t(curr) : curr;
+          return `${currencyName}: ${priceInCurr.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true })} ${curr}`;
+        })
+        .join('\n');
+
+      shareText = `🌟 ${t('site_title')} 🌟\n\n${t('gold_21k_prices_per_country') || 'أسعار الذهب عيار 21 في مختلف العملات'}:\n${priceList}\n\n🕒 ${t('last_update')}: ${formattedDate} ${formattedTime}\n\n${t('footer_desc')}${hashtags}`;
     } else {
       shareText = `🌟 ${t('site_title')} 🌟\n\n${t('share_description')}\n\n${t('footer_desc')}${hashtags}`;
     }
@@ -894,6 +938,14 @@ function AppContent() {
             site_name: dbData.site_name || dbData.siteName || prev.site_name,
             admin_email: dbData.admin_email || dbData.contactEmail || prev.admin_email
           }));
+        }
+        
+        const apiKeysDoc = await getDoc(doc(db, 'settings', 'apiKeys'));
+        if (apiKeysDoc.exists()) {
+          const apiData = apiKeysDoc.data();
+          if (apiData.margins) {
+            setMargins(apiData.margins);
+          }
         }
       } catch (e) {
         console.error("Failed to fetch settings from Firestore", e);
@@ -1067,7 +1119,7 @@ function AppContent() {
             </Link>
             <div className="flex flex-col">
               <div className="flex items-center gap-3">
-                <h1 className="text-xl font-bold gold-text-gradient whitespace-nowrap">{settings.site_name || t('site_title')}</h1>
+                <h1 className="text-xl font-extrabold text-primary whitespace-nowrap">{settings.site_name || t('site_title')}</h1>
                 <button 
                   onClick={() => navigate('/admin')} 
                   className="hidden sm:flex p-1.5 bg-white/5 rounded-lg border border-white/10 text-gray-400 hover:text-primary transition-all"
@@ -1180,7 +1232,7 @@ function AppContent() {
           </div>
         )}
         <Routes>
-          <Route path="/" element={<HomePage prices={prices} currency={currency} exchangeRates={exchangeRates} lastUpdate={lastUpdate} setCurrency={setCurrency} setLanguage={setLanguage} calcAmount={calcAmount} setCalcAmount={setCalcAmount} calcType={calcType} setCalcType={setCalcType} handleShare={handleShare} goldData={goldData} settings={settings} />} />
+          <Route path="/" element={<HomePage prices={prices} currency={currency} exchangeRates={exchangeRates} lastUpdate={lastUpdate} setCurrency={setCurrency} setLanguage={setLanguage} calcAmount={calcAmount} setCalcAmount={setCalcAmount} calcType={calcType} setCalcType={setCalcType} handleShare={handleShare} goldData={goldData} settings={settings} margins={margins} />} />
           <Route path="/tips" element={<TipsPage settings={settings} />} />
           <Route path="/about" element={<AboutPage settings={settings} />} />
           <Route path="/admin" element={<Suspense fallback={<div className="min-h-screen bg-bg flex items-center justify-center"><RefreshCw className="w-10 h-10 text-primary animate-spin" /></div>}><AdminDashboard onBack={() => navigate('/')} /></Suspense>} />
@@ -1195,7 +1247,7 @@ function AppContent() {
             <div className="flex flex-col items-center gap-4">
               <div className="flex items-center gap-2 text-primary">
                 <Coins size={32} />
-                <span className="text-2xl font-bold gold-text-gradient">{t('site_title')}</span>
+                <span className="text-2xl font-extrabold text-primary">{t('site_title')}</span>
               </div>
               <p className="text-gray-500 text-sm max-w-md mx-auto">{t('footer_desc')}</p>
               <div className="flex items-center gap-2 text-primary text-sm font-bold">
